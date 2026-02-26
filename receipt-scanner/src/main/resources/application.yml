@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: receipt-scanner
+    version: 1.0.0
+
+  datasource:
+    url: "jdbc:postgresql://localhost:5432/mydb"
+    username: "admin"
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
