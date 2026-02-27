@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
+import jakarta.persistence.SequenceGenerator
 import jakarta.persistence.Table
 import java.math.BigDecimal
 
@@ -14,7 +15,8 @@ import java.math.BigDecimal
 @Table(name = "store")
 class StoreEntity (
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "store_gen")
+    @SequenceGenerator(name = "store_gen", sequenceName = "store_seq", allocationSize = 1)
     var id: Long = 0,
 
     @Column(nullable = false)

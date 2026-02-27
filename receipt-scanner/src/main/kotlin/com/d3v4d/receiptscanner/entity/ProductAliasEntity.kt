@@ -7,16 +7,16 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
+import jakarta.persistence.SequenceGenerator
 import jakarta.persistence.Table
-import java.math.BigDecimal
 
-// This entity represents an alias for a product, allowing users to associate different names with the same product.
-// It will be useful for OCR results where the product name might be recognized differently, but we want to link it to a known product in our database.
+// ...existing code...
 @Entity
 @Table(name = "product_alias")
 class ProductAliasEntity(
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "product_alias_gen")
+    @SequenceGenerator(name = "product_alias_gen", sequenceName = "product_alias_seq", allocationSize = 1)
     var id: Long = 0,
 
     @Column(nullable = false)

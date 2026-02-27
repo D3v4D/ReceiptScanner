@@ -7,16 +7,16 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
+import jakarta.persistence.SequenceGenerator
 import jakarta.persistence.Table
 import java.math.BigDecimal
 
 @Entity
-@Table(
-    name = "receiptLines"
-)
+@Table(name = "receiptLines")
 class ReceiptLineEntity (
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "receipt_lines_gen")
+    @SequenceGenerator(name = "receipt_lines_gen", sequenceName = "receipt_lines_seq", allocationSize = 1)
     var id: Long = 0,
 
     @Column(nullable = false)

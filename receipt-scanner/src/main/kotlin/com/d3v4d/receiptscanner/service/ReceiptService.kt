@@ -4,84 +4,76 @@ import com.d3v4d.receiptscanner.ReceiptNotFoundException
 import com.d3v4d.receiptscanner.UserNotFoundException
 import com.d3v4d.receiptscanner.dto.request.ReceiptRequestDTO
 import com.d3v4d.receiptscanner.dto.response.ReceiptResponseDTO
+import com.d3v4d.receiptscanner.filter.ReceiptFilter
 import com.d3v4d.receiptscanner.repository.ReceiptRepository
 import com.d3v4d.receiptscanner.repository.UserRepository
-import com.d3v4d.receiptscanner.entity.StoreEntity
-import com.d3v4d.receiptscanner.entity.UserEntity
-
+import com.d3v4d.receiptscanner.specification.ReceiptSpecification
 import org.springframework.stereotype.Service
+import java.math.BigDecimal
 
 @Service
 class ReceiptService(
     private val receiptRepository: ReceiptRepository,
     private val userRepository: UserRepository,
+    private val fuzzyProductMatchService: FuzzyProductMatchService,
 ) {
     fun getReceipts(
         id: Long?,
-        minPrice: Int?,
-        maxPrice: Int?,
-        includeProduct: String?,
-        excludeProduct: String?,
-        user: UserEntity
-        ) : List<ReceiptResponseDTO> {
-        return if (id == null && minPrice == null && maxPrice == null) {
-            receiptRepository
-                .findAll()
-                .map { it.toDTO() }
-        } else if (id != null) {
-            listOf(
-                receiptRepository
-                    .findById(id)
-                    .orElseThrow { ReceiptNotFoundException(id) }
-                    .toDTO()
-            )
-        }
-        else if (include != null){
+        include: String?,
+        exclude: String?,
+        minPrice: BigDecimal? = null,
+        maxPrice: BigDecimal? = null,
+    ): List<ReceiptResponseDTO> {
+        // TODO: replace hardcoded userId=1 with the authenticated principal once security is in place
+        val user = userRepository.findById(1L).orElse(null)
+            ?: throw UserNotFoundException(1L)
 
-        }
+        val filter = ReceiptFilter(
+            id = id,
+            includeProduct = include,
+            excludeProduct = exclude,
+            minPrice = minPrice,
+            maxPrice = maxPrice,
+        )
 
-    }
-
-    fun insertReceipt(receipt: ReceiptRequestDTO) : ReceiptResponseDTO {
         return receiptRepository
-            .save(
-                receipt.toEntity(
-                    user = userRepository
-                        .findById(receipt.userId)
-                        .orElseThrow {
-                            UserNotFoundException(receipt.userId)
-                        },
-                    products = TODO()
-                )
-            )
+            .findAll(ReceiptSpecification.build(filter, user))
+            .map { it.toDTO() }
+    }
+
+    fun insertReceipt(receipt: ReceiptRequestDTO): ReceiptResponseDTO {
+        val user = userRepository.findById(receipt.userId).orElse(null)
+            ?: throw UserNotFoundException(receipt.userId)
+
+        // Fuzzy-match every line's raw OCR name to a known (or newly created) product
+        val products = receipt.lines.map { line ->
+            fuzzyProductMatchService.resolve(line.name)
+        }
+
+        return receiptRepository
+            .save(receipt.toEntity(user = user, products = products))
             .toDTO()
     }
 
-    fun updateReceipt(receipt: ReceiptRequestDTO, id : Long?) : ReceiptResponseDTO =
-        receiptRepository
-            .findById(id?:0)
-            .orElseThrow { ReceiptNotFoundException(id?:0) }
-            .let {
-                receiptRepository.save(
-                    receipt.toEntity(
-                        user = userRepository
-                            .findById(receipt.userId)
-                            .orElseThrow {
-                                UserNotFoundException(receipt.userId)
-                            },
-                        id = it.id
-                    )
-                )
-            }
+    fun updateReceipt(receipt: ReceiptRequestDTO, id: Long?): ReceiptResponseDTO {
+        val existing = receiptRepository.findById(id ?: 0).orElse(null)
+            ?: throw ReceiptNotFoundException(id ?: 0)
+
+        val user = userRepository.findById(receipt.userId).orElse(null)
+            ?: throw UserNotFoundException(receipt.userId)
+
+        val products = receipt.lines.map { line ->
+            fuzzyProductMatchService.resolve(line.name)
+        }
+
+        return receiptRepository
+            .save(receipt.toEntity(user = user, id = existing.id, products = products))
             .toDTO()
+    }
 
     fun deleteReceipt(receiptId: Long) {
-        receiptRepository
-            .deleteById(
-                receiptRepository
-                    .findById(receiptId)
-                    .orElseThrow { ReceiptNotFoundException(receiptId) }
-                    .id
-            )
+        val receipt = receiptRepository.findById(receiptId).orElse(null)
+            ?: throw ReceiptNotFoundException(receiptId)
+        receiptRepository.deleteById(receipt.id)
     }
 }

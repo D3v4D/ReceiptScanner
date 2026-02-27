@@ -7,17 +7,16 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
+import jakarta.persistence.SequenceGenerator
 import jakarta.persistence.Table
 
-
-// This entity is used to store the price of a product at a specific time. It can be used to track price changes over time and to calculate the average price of a product.
+// ...existing code...
 @Entity
-@Table(
-    name = "product_prices"
-)
+@Table(name = "product_prices")
 class ProductPriceEntity (
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "product_prices_gen")
+    @SequenceGenerator(name = "product_prices_gen", sequenceName = "product_prices_seq", allocationSize = 1)
     var id: Long = 0,
 
     @ManyToOne

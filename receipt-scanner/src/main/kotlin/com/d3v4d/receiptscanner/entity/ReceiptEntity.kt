@@ -9,16 +9,16 @@ import jakarta.persistence.Id
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.OneToMany
+import jakarta.persistence.SequenceGenerator
 import jakarta.persistence.Table
 import java.time.Instant
 
 @Entity
-@Table(
-    name = "receipts"
-)
+@Table(name = "receipts")
 class ReceiptEntity (
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "receipts_gen")
+    @SequenceGenerator(name = "receipts_gen", sequenceName = "receipts_seq", allocationSize = 1)
     var id: Long = 0,
 
 
@@ -42,4 +42,7 @@ class ReceiptEntity (
     @ManyToOne
     @JoinColumn(name = "store_id")
     var store: StoreEntity? = null
-)
+) {
+    val storeName: String
+        get() = store?.name ?: ""
+}

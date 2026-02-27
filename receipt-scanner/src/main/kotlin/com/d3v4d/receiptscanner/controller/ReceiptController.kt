@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import java.math.BigDecimal
 
 @CrossOrigin("*")
 @RestController
@@ -25,11 +26,15 @@ class ReceiptController (
         @RequestParam(value = "id", required = false) id: Long?,
         @RequestParam(value = "include", required = false) include: String?,
         @RequestParam(value = "exclude", required = false) exclude: String?,
+        @RequestParam(value = "minPrice", required = false) minPrice: BigDecimal?,
+        @RequestParam(value = "maxPrice", required = false) maxPrice: BigDecimal?,
     ): List<ReceiptResponseDTO> {
         return receiptService.getReceipts(
             id = id,
             include = include,
             exclude = exclude,
+            minPrice = minPrice,
+            maxPrice = maxPrice,
         )
     }
 

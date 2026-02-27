@@ -1,4 +1,4 @@
-package com.d3v4d.receiptscanner.service
+package com.d3v4d.receiptscanner.filter
 
 import java.math.BigDecimal
 
