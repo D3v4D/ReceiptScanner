@@ -1,15 +1,8 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
-import ListReceiptComponent from './components/ListReceiptComponent'
+import "./App.css";
+import ReceiptScannerApp from "./components/ReceiptScannerApp";
 
 function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <ListReceiptComponent/>
-  )
+  return <ReceiptScannerApp />;
 }
 
-export default App
+export default App;

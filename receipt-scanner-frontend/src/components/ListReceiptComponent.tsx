@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { listReceipts } from "../services/ReceiptService";
 import type { Receipt } from "../types/receipt.types";
 

@@ -43,7 +43,7 @@ fun ReceiptRequestDTO.toEntity(
         user = user
     )
 
-    receipt.lines = this.lines.mapIndexed { index, dto ->
+    receipt.lines = this.products.mapIndexed { index, dto ->
             dto.toEntity(
                 receipt,
                 products[index]

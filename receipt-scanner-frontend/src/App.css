@@ -1,0 +1,14 @@
+.app pre {
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app details summary {
+  cursor: pointer;
+}
+
+.app textarea {
+  min-height: 120px;
+}
+

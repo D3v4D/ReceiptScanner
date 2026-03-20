@@ -4,6 +4,6 @@ class ImageRequestDTO (
     val image: String
 ) {
     init {
-        TODO()
+            TODO()
     }
 }

@@ -46,7 +46,7 @@ class ReceiptService(
             ?: throw UserNotFoundException(receipt.userId)
 
         // Fuzzy-match every line's raw OCR name to a known (or newly created) product
-        val products = receipt.lines.map { line ->
+        val products = receipt.products.map { line ->
             fuzzyProductMatchService.resolve(line.name)
         }
 
@@ -62,7 +62,7 @@ class ReceiptService(
         val user = userRepository.findById(receipt.userId).orElse(null)
             ?: throw UserNotFoundException(receipt.userId)
 
-        val products = receipt.lines.map { line ->
+        val products = receipt.products.map { line ->
             fuzzyProductMatchService.resolve(line.name)
         }
 
