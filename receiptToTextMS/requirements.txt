@@ -1,0 +1,10 @@
+nfastapi
+uvicorn[standard]
+python-multipart
+requests
+numpy
+opencv-python
+paddleocr
+streamlit
+pytest
+
