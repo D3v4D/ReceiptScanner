@@ -25,13 +25,6 @@ class StoreEntity (
     @Column(nullable = false)
     var address: String = "",
 
-    @Column(nullable = false)
-    var longitude: BigDecimal = BigDecimal.ZERO,
-
-    @Column(nullable = false)
-    var latitude: BigDecimal = BigDecimal.ZERO,
-
-    @ManyToOne
-    @JoinColumn(name = "store_chain_id", nullable = false)
-    var storeChain: StoreChainEntity? = null
+    @Column
+    var storeChain: String? = null
 )

@@ -1,7 +1,7 @@
 package com.d3v4d.receiptscanner.specification
 
 import com.d3v4d.receiptscanner.entity.ReceiptEntity
-import com.d3v4d.receiptscanner.entity.ReceiptLineEntity
+import com.d3v4d.receiptscanner.entity.ReceiptItemEntity
 import com.d3v4d.receiptscanner.entity.UserEntity
 import com.d3v4d.receiptscanner.filter.ReceiptFilter
 import jakarta.persistence.criteria.JoinType
@@ -32,7 +32,7 @@ object ReceiptSpecification {
             // 💰 minimum price — computed as sum of (unitPrice * quantity) via subquery
             filter.minPrice?.let { minPrice ->
                 val subquery = query.subquery(BigDecimal::class.java)
-                val lineRoot = subquery.from(ReceiptLineEntity::class.java)
+                val lineRoot = subquery.from(ReceiptItemEntity::class.java)
                 subquery.select(
                     cb.sum(
                         cb.toBigDecimal(
@@ -49,7 +49,7 @@ object ReceiptSpecification {
             // 💰 maximum price — computed as sum of (unitPrice * quantity) via subquery
             filter.maxPrice?.let { maxPrice ->
                 val subquery = query.subquery(BigDecimal::class.java)
-                val lineRoot = subquery.from(ReceiptLineEntity::class.java)
+                val lineRoot = subquery.from(ReceiptItemEntity::class.java)
                 subquery.select(
                     cb.sum(
                         cb.toBigDecimal(

@@ -13,14 +13,14 @@ import java.math.BigDecimal
 
 @Entity
 @Table(name = "receiptLines")
-class ReceiptLineEntity (
+class ReceiptItemEntity (
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "receipt_lines_gen")
     @SequenceGenerator(name = "receipt_lines_gen", sequenceName = "receipt_lines_seq", allocationSize = 1)
     var id: Long = 0,
 
     @Column(nullable = false)
-    var rawName: String = "",
+    var name: String = "",
 
     @Column(nullable = false)
     var quantity: BigDecimal = BigDecimal.ZERO,
@@ -31,11 +31,11 @@ class ReceiptLineEntity (
     @Column(nullable = false)
     var unitPrice: BigDecimal = BigDecimal.ZERO,
 
+    @Column(nullable = false)
+    var totalPrice: BigDecimal = BigDecimal.ZERO,
+
     @ManyToOne
     @JoinColumn(name = "receipt_id", nullable = false)
     var receipt: ReceiptEntity? = null,
 
-    @ManyToOne
-    @JoinColumn(name = "product_id")
-    var product: ProductEntity? = null
 )

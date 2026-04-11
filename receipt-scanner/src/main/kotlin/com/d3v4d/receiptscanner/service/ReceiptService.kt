@@ -15,7 +15,6 @@ import java.math.BigDecimal
 class ReceiptService(
     private val receiptRepository: ReceiptRepository,
     private val userRepository: UserRepository,
-    private val fuzzyProductMatchService: FuzzyProductMatchService,
 ) {
     fun getReceipts(
         id: Long?,
@@ -45,13 +44,8 @@ class ReceiptService(
         val user = userRepository.findById(receipt.userId).orElse(null)
             ?: throw UserNotFoundException(receipt.userId)
 
-        // Fuzzy-match every line's raw OCR name to a known (or newly created) product
-        val products = receipt.products.map { line ->
-            fuzzyProductMatchService.resolve(line.name)
-        }
-
         return receiptRepository
-            .save(receipt.toEntity(user = user, products = products))
+            .save(receipt.toEntity(user = user))
             .toDTO()
     }
 
@@ -62,12 +56,8 @@ class ReceiptService(
         val user = userRepository.findById(receipt.userId).orElse(null)
             ?: throw UserNotFoundException(receipt.userId)
 
-        val products = receipt.products.map { line ->
-            fuzzyProductMatchService.resolve(line.name)
-        }
-
         return receiptRepository
-            .save(receipt.toEntity(user = user, id = existing.id, products = products))
+            .save(receipt.toEntity(user = user, id = existing.id))
             .toDTO()
     }
 

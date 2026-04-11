@@ -2,6 +2,7 @@ package com.d3v4d.receiptscanner.controller
 
 import com.d3v4d.receiptscanner.dto.request.ReceiptRequestDTO
 import com.d3v4d.receiptscanner.dto.response.ReceiptResponseDTO
+import com.d3v4d.receiptscanner.service.ReceiptScanService
 import com.d3v4d.receiptscanner.service.ReceiptService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.CrossOrigin
@@ -22,6 +23,7 @@ import java.math.BigDecimal
 @RequestMapping("/api/receipts")
 class ReceiptController (
     private val receiptService: ReceiptService,
+    private val receiptScanService: ReceiptScanService,
 ) {
     @GetMapping
     fun getReceipts(
@@ -65,8 +67,7 @@ class ReceiptController (
     @PostMapping("/scan", consumes = ["multipart/form-data"])
     fun scanReceipt(
         @RequestParam("image") image: MultipartFile,
-    ): ResponseEntity<Unit> {
-        // TODO: process the image
-        return ResponseEntity.ok().build()
+    ): ResponseEntity<String> {
+        return ResponseEntity.ok(receiptScanService.scanReceipt(image))
     }
 }

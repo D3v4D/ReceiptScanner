@@ -33,7 +33,7 @@ class ReceiptEntity (
         cascade = [CascadeType.ALL],
         orphanRemoval = true
     )
-    var lines: MutableList<ReceiptLineEntity> = mutableListOf(),
+    var lines: MutableList<ReceiptItemEntity> = mutableListOf(),
 
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
@@ -42,7 +42,4 @@ class ReceiptEntity (
     @ManyToOne
     @JoinColumn(name = "store_id")
     var store: StoreEntity? = null
-) {
-    val storeName: String
-        get() = store?.name ?: ""
-}
+)

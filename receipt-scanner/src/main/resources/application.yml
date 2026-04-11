@@ -12,3 +12,6 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+
+python-service:
+  base-url: ${PYTHON_SERVICE_BASE_URL:http://localhost:8000}
