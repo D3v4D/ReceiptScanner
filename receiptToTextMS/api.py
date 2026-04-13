@@ -1,5 +1,5 @@
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 import cv2
 import numpy as np
 import json
@@ -21,6 +21,11 @@ def run_pipeline(image):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/")
+def docs_redirect():
+    return RedirectResponse(url="/docs")
 
 
 @app.post("/extract")

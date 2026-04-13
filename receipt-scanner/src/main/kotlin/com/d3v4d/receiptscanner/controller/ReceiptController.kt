@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import org.slf4j.LoggerFactory
 import java.math.BigDecimal
 
 @CrossOrigin("*")
@@ -25,6 +26,8 @@ class ReceiptController (
     private val receiptService: ReceiptService,
     private val receiptScanService: ReceiptScanService,
 ) {
+    private val logger = LoggerFactory.getLogger(ReceiptController::class.java)
+
     @GetMapping
     fun getReceipts(
         @RequestParam(value = "id", required = false) id: Long?,
@@ -68,6 +71,12 @@ class ReceiptController (
     fun scanReceipt(
         @RequestParam("image") image: MultipartFile,
     ): ResponseEntity<String> {
+        logger.info(
+            "Received receipt scan request: filename={}, contentType={}, size={} bytes",
+            image.originalFilename,
+            image.contentType,
+            image.size,
+        )
         return ResponseEntity.ok(receiptScanService.scanReceipt(image))
     }
 }

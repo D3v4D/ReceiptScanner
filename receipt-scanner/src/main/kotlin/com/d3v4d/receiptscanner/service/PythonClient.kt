@@ -9,11 +9,13 @@ import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.multipart.MultipartFile
 import org.springframework.web.reactive.function.client.bodyToMono
 import org.springframework.core.io.ByteArrayResource
+import org.slf4j.LoggerFactory
 
 @Service
 class PythonClient(
     @Value("\${python-service.base-url:http://localhost:8000}") baseUrl: String,
 ) {
+    private val logger = LoggerFactory.getLogger(PythonClient::class.java)
 
     private val webClient = WebClient.create(baseUrl)
 
@@ -26,16 +28,26 @@ class PythonClient(
             }
         }
 
-        builder.part("image", imageResource)
+        builder.part("file", imageResource)
             .filename(file.originalFilename ?: "image")
             .contentType(file.contentType?.let { MediaType.parseMediaType(it) } ?: MediaType.APPLICATION_OCTET_STREAM)
 
-        return webClient.post()
-            .uri("/process")
+        logger.info(
+            "Calling Python service for receipt scan: filename={}, contentType={}, size={} bytes",
+            file.originalFilename,
+            file.contentType,
+            file.size,
+        )
+
+        val response = webClient.post()
+            .uri("/extract")
             .contentType(MediaType.MULTIPART_FORM_DATA)
             .body(BodyInserters.fromMultipartData(builder.build()))
             .retrieve()
             .bodyToMono<String>()
             .block() ?: throw IllegalStateException("Python service returned an empty response body")
+
+        logger.info("Python service returned scan response ({} chars)", response.length)
+        return response
     }
 }

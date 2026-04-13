@@ -1,22 +1,40 @@
 import requests
 import json
+import os
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434/api/generate")
 MODEL = "qwen2.5:7b"
+LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "600"))
 
 
 def _call_llm(prompt):
-    r = requests.post(
-        OLLAMA_URL,
-        json={
-            "model": MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "temperature": 0,
-            "format": "json"
-        }
-    )
-    return r.json()["response"]
+    try:
+        r = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "temperature": 0,
+                "format": "json"
+            },
+            timeout=LLM_TIMEOUT_SECONDS,
+        )
+        r.raise_for_status()
+        payload = r.json()
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(
+            "LLM request failed. Ensure Ollama is running and reachable at "
+            f"{OLLAMA_URL}, and model '{MODEL}' is available (e.g. `ollama pull {MODEL}`). "
+            f"Original error: {exc}"
+        ) from exc
+    except ValueError as exc:
+        raise RuntimeError(f"LLM returned non-JSON response: {exc}") from exc
+
+    if "response" not in payload:
+        raise RuntimeError(f"LLM response missing 'response' field: {payload}")
+
+    return payload["response"]
 
 
 REQUIRED_KEYS = {"store", "purchase_datetime", "products", "total", "payment_method", "currency"}
@@ -122,7 +140,7 @@ def _deduplicate_products(data):
     return data
 
 
-MAX_RETRIES = 5
+MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "5"))
 
 
 def _collect_null_paths(data, path="", nullable_fields=None):
