@@ -14,6 +14,7 @@ services:
     build: ./receiptToTextMS
     environment:
       OLLAMA_URL: http://ollama:11434/api/generate
+      OLLAMA_MODEL: qwen2.5:7b
       LLM_TIMEOUT_SECONDS: "600"
       LLM_MAX_RETRIES: "5"
       PYTHONUNBUFFERED: "1"
@@ -26,15 +27,7 @@ services:
     image: ollama/ollama:latest
     profiles:
       - llm
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    ports:
-      - "11434:11434"
+    gpus: all
     volumes:
       - ollama_data:/root/.ollama
 

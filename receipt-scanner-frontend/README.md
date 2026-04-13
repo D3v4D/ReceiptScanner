@@ -1,11 +1,11 @@
 # Receipt Scanner Frontend
 
-Simple frontend for managing receipts and users against the API running on `http://localhost:5432`.
+Minimal frontend for sending receipt images to the Kotlin backend scan endpoint.
 
 ## Features
-- List, filter, create, update, and delete receipts.
-- Upload base64 receipt image to scan endpoint.
-- List, create, update, and delete users.
+- Upload an image file from your device.
+- Capture a receipt photo using the browser camera.
+- Send image as `multipart/form-data` to `POST /api/receipts/scan`.
 
 ## Setup
 ```bash
@@ -23,5 +23,5 @@ npm run build
 ```
 
 ## Notes
-- Update the API base URL in `src/services/api.ts` if needed.
-- The scan payload uses `{ "userId": string, "base64Image": string }`.
+- Default backend base URL is `http://localhost:8080`.
+- Override backend URL with `VITE_API_BASE_URL`.

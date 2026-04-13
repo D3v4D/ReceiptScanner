@@ -3,7 +3,7 @@ import json
 import os
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434/api/generate")
-MODEL = "qwen2.5:7b"
+MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "600"))
 
 
