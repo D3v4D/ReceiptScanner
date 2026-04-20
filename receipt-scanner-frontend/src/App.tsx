@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import axios from "axios";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -10,7 +11,7 @@ import {
   CircularProgress,
   Container,
   CssBaseline,
-  Divider,
+  TextField,
   Grid,
   Stack,
   Typography,
@@ -22,17 +23,248 @@ import "./App.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
+type ReceiptLineForm = {
+  name: string;
+  quantity: string;
+  unit: string;
+  unitPrice: string;
+  totalPrice: string;
+};
+
+type ReceiptForm = {
+  storeName: string;
+  storeAddress: string;
+  storeTaxNumber: string;
+  storeChain: string;
+  purchaseDateTime: string;
+  total: string;
+  paymentMethod: string;
+  currency: string;
+  userId: string;
+  lines: ReceiptLineForm[];
+};
+
+const createEmptyLine = (): ReceiptLineForm => ({
+  name: "",
+  quantity: "1",
+  unit: "piece",
+  unitPrice: "0",
+  totalPrice: "0",
+});
+
+const createEmptyForm = (): ReceiptForm => ({
+  storeName: "",
+  storeAddress: "",
+  storeTaxNumber: "0",
+  storeChain: "",
+  purchaseDateTime: new Date().toISOString(),
+  total: "0",
+  paymentMethod: "CARD",
+  currency: "HUF",
+  userId: "1",
+  lines: [createEmptyLine()],
+});
+
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+};
+
+const readValue = (
+  source: Record<string, unknown>,
+  keys: string[],
+): string => {
+  for (const key of keys) {
+    const raw = source[key];
+    if (raw !== undefined && raw !== null) {
+      return String(raw);
+    }
+  }
+
+  return "";
+};
+
+const parseJsonText = (text: string): unknown | null => {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // Continue with fallback extraction.
+  }
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) {
+    try {
+      return JSON.parse(fencedMatch[1]);
+    } catch {
+      // Continue with fallback extraction.
+    }
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const objectCandidate = trimmed.slice(firstBrace, lastBrace + 1);
+    try {
+      return JSON.parse(objectCandidate);
+    } catch {
+      // Continue with array fallback.
+    }
+  }
+
+  const firstBracket = trimmed.indexOf("[");
+  const lastBracket = trimmed.lastIndexOf("]");
+  if (firstBracket >= 0 && lastBracket > firstBracket) {
+    const arrayCandidate = trimmed.slice(firstBracket, lastBracket + 1);
+    try {
+      return JSON.parse(arrayCandidate);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+const normalizeScanPayload = (value: unknown): unknown => {
+  if (typeof value === "string") {
+    return parseJsonText(value) ?? { rawResponse: value };
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  const root = asRecord(value);
+  if (!root) {
+    return value;
+  }
+
+  if (root.formatted_json !== undefined) {
+    const formattedJson = root.formatted_json;
+    if (formattedJson && typeof formattedJson === "object") {
+      return formattedJson;
+    }
+  }
+
+  if (typeof root.formatted_text === "string") {
+    const parsed = parseJsonText(root.formatted_text);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  if (typeof root.message === "string") {
+    const parsedMessage = parseJsonText(root.message);
+    if (parsedMessage !== null) {
+      return normalizeScanPayload(parsedMessage);
+    }
+  }
+
+  for (const key of ["data", "result", "receipt", "payload"]) {
+    const candidate = root[key];
+    if (candidate && typeof candidate === "object") {
+      const candidateRecord = asRecord(candidate);
+      if (
+        candidateRecord?.store ||
+        candidateRecord?.products ||
+        candidateRecord?.items ||
+        candidateRecord?.lines
+      ) {
+        return candidate;
+      }
+    }
+  }
+
+  return root;
+};
+
+const normalizeScanResultToForm = (value: unknown): Partial<ReceiptForm> => {
+  const normalized = normalizeScanPayload(value);
+  const root = asRecord(normalized);
+  if (!root) {
+    return {};
+  }
+
+  const store = asRecord(root.store) ?? {};
+  const productArray = Array.isArray(root.products)
+    ? root.products
+    : Array.isArray(root.lines)
+      ? root.lines
+      : Array.isArray(root.items)
+        ? root.items
+        : [];
+
+  const lines: ReceiptLineForm[] = productArray
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => item !== null)
+    .map((item) => ({
+      name: readValue(item, ["name", "productName", "description", "item"]),
+      quantity: readValue(item, ["quantity", "qty", "amount"]),
+      unit: readValue(item, ["unit", "uom"]),
+      unitPrice: readValue(item, ["unit_price", "unitPrice", "price"]),
+      totalPrice: readValue(item, ["total_price", "totalPrice", "lineTotal", "sum"]),
+    }));
+
+  return {
+    storeName: readValue(store, ["name", "storeName"]) || readValue(root, ["storeName", "store_name"]),
+    storeAddress: readValue(store, ["address", "storeAddress"]),
+    storeTaxNumber: readValue(store, ["taxNumber", "tax_number", "vat", "vat_number"]),
+    storeChain: readValue(store, ["chain", "storeChain"]),
+    purchaseDateTime: readValue(root, ["purchase_datetime", "purchaseDateTime", "date", "datetime"]),
+    total: readValue(root, ["total", "grand_total", "amount_total"]),
+    paymentMethod: readValue(root, ["payment_method", "paymentMethod", "payment"]),
+    currency: readValue(root, ["currency", "curr"]),
+    lines,
+  };
+};
+
+const buildReceiptPayload = (form: ReceiptForm) => ({
+  store: {
+    name: form.storeName,
+    address: form.storeAddress,
+    taxNumber: Number(form.storeTaxNumber || 0),
+    chain: form.storeChain,
+  },
+  purchase_datetime: form.purchaseDateTime,
+  products: form.lines.map((line) => ({
+    name: line.name,
+    quantity: Number(line.quantity || 0),
+    unit: line.unit,
+    unit_price: Number(line.unitPrice || 0),
+    total_price: Number(line.totalPrice || 0),
+  })),
+  total: Number(form.total || 0),
+  payment_method: form.paymentMethod,
+  currency: form.currency,
+  userId: Number(form.userId || 0),
+});
+
 function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [submittingCorrection, setSubmittingCorrection] = useState(false);
   const [startingCamera, setStartingCamera] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
+  const [canCorrect, setCanCorrect] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<unknown | null>(null);
+  const [correctionResult, setCorrectionResult] = useState<unknown | null>(null);
+  const [receiptForm, setReceiptForm] = useState<ReceiptForm>(createEmptyForm());
+  const [mobileCorrectionView, setMobileCorrectionView] = useState<"receipt" | "lines">("lines");
 
   const selectedFileLabel = useMemo(() => {
     if (!selectedFile) {
@@ -82,7 +314,7 @@ function App() {
     try {
       setStartingCamera(true);
       setErrorMessage(null);
-      setResult(null);
+      setScanResult(null);
 
       stopCamera();
 
@@ -163,13 +395,23 @@ function App() {
     });
 
     setErrorMessage(null);
-    setResult(null);
+    setScanResult(null);
     setSelectedFile(file);
+    stopCamera();
+  };
+
+  const handleScanClick = async () => {
+    if (cameraActive) {
+      await captureFromCamera();
+      return;
+    }
+
+    await startCamera();
   };
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     setErrorMessage(null);
-    setResult(null);
+    setScanResult(null);
     const file = event.target.files?.[0] ?? null;
     setSelectedFile(file);
   };
@@ -183,6 +425,7 @@ function App() {
     try {
       setUploading(true);
       setErrorMessage(null);
+      setCorrectionResult(null);
 
       const formData = new FormData();
       formData.append("image", selectedFile);
@@ -197,13 +440,42 @@ function App() {
         },
       );
 
-      const responseText =
-        typeof response.data === "string"
-          ? response.data
-          : JSON.stringify(response.data, null, 2);
-      setResult(responseText);
+      const normalizedResult = normalizeScanPayload(response.data);
+
+      setScanResult(normalizedResult);
+      setCanCorrect(true);
+
+      const prefill = normalizeScanResultToForm(normalizedResult);
+      setReceiptForm((prev) => ({
+        ...prev,
+        ...prefill,
+        lines: prefill.lines && prefill.lines.length > 0 ? prefill.lines : prev.lines,
+      }));
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        const normalizedFromError = normalizeScanPayload(error.response?.data);
+        const prefill = normalizeScanResultToForm(normalizedFromError);
+        const hasPrefill = Object.values(prefill).some((field) => {
+          if (Array.isArray(field)) {
+            return field.length > 0;
+          }
+
+          return typeof field === "string" ? field.trim().length > 0 : Boolean(field);
+        });
+
+        if (hasPrefill) {
+          setScanResult(normalizedFromError);
+          setCanCorrect(true);
+          setErrorMessage(null);
+          setReceiptForm((prev) => ({
+            ...prev,
+            ...prefill,
+            lines: prefill.lines && prefill.lines.length > 0 ? prefill.lines : prev.lines,
+          }));
+          navigate("/correction");
+          return;
+        }
+
         const backendMessage =
           typeof error.response?.data === "string"
             ? error.response.data
@@ -217,127 +489,469 @@ function App() {
     }
   };
 
+  const addLine = () => {
+    setReceiptForm((prev) => ({ ...prev, lines: [...prev.lines, createEmptyLine()] }));
+  };
+
+  const removeLine = (index: number) => {
+    setReceiptForm((prev) => ({
+      ...prev,
+      lines: prev.lines.length <= 1 ? prev.lines : prev.lines.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateLine = (index: number, field: keyof ReceiptLineForm, value: string) => {
+    setReceiptForm((prev) => ({
+      ...prev,
+      lines: prev.lines.map((line, i) => (i === index ? { ...line, [field]: value } : line)),
+    }));
+  };
+
+  const submitCorrection = async () => {
+    try {
+      setSubmittingCorrection(true);
+      setErrorMessage(null);
+
+      const payload = buildReceiptPayload(receiptForm);
+      const response = await axios.post(`${API_BASE_URL}/api/receipts`, payload, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      setCorrectionResult(response.data);
+      navigate("/scan");
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const backendMessage =
+          typeof error.response?.data === "string"
+            ? error.response.data
+            : JSON.stringify(error.response?.data ?? {}, null, 2);
+        setErrorMessage(backendMessage || error.message);
+      } else {
+        setErrorMessage("Failed to submit corrected data.");
+      }
+    } finally {
+      setSubmittingCorrection(false);
+    }
+  };
+
+  const formattedScanResult = useMemo(() => {
+    if (!scanResult) {
+      return "";
+    }
+
+    return JSON.stringify(scanResult, null, 2);
+  }, [scanResult]);
+
+  const formattedCorrectionResult = useMemo(() => {
+    if (!correctionResult) {
+      return "";
+    }
+
+    return JSON.stringify(correctionResult, null, 2);
+  }, [correctionResult]);
+
+  const isScanRoute = location.pathname === "/scan" || location.pathname === "/";
+
+  const scanView = (
+    <>
+      <Grid container spacing={1.2}>
+        <Grid size={6}>
+          <Button
+            component="label"
+            variant="outlined"
+            fullWidth
+            startIcon={<ImageRoundedIcon />}
+          >
+            Upload
+            <input
+              hidden
+              accept="image/*"
+              capture="environment"
+              type="file"
+              onChange={handleFileChange}
+            />
+          </Button>
+        </Grid>
+        <Grid size={6}>
+          <Button
+            variant="outlined"
+            fullWidth
+            startIcon={<PhotoCameraRoundedIcon />}
+            onClick={() => {
+              void handleScanClick();
+            }}
+            disabled={startingCamera}
+          >
+            {startingCamera ? "Starting..." : "Scan"}
+          </Button>
+        </Grid>
+      </Grid>
+
+      {cameraActive ? (
+        <Box className="camera-shell">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="camera-preview"
+          />
+        </Box>
+      ) : null}
+
+      <Typography variant="body2" color="text.secondary">
+        {selectedFileLabel}
+      </Typography>
+
+      {previewUrl ? (
+        <Box
+          component="img"
+          src={previewUrl}
+          alt="Selected receipt"
+          className="preview-image"
+        />
+      ) : null}
+
+      <Button
+        variant="contained"
+        size="large"
+        startIcon={
+          uploading ? <CircularProgress size={18} /> : <CloudUploadRoundedIcon />
+        }
+        onClick={handleUpload}
+        disabled={uploading || !selectedFile}
+      >
+        {uploading ? "Uploading..." : "Upload to Backend"}
+      </Button>
+
+      {formattedScanResult ? (
+        <Box>
+          <Typography variant="subtitle2" gutterBottom>
+            Extracted JSON
+          </Typography>
+          <Box component="pre" className="result-box">
+            {formattedScanResult}
+          </Box>
+        </Box>
+      ) : null}
+
+      {formattedCorrectionResult ? (
+        <Box>
+          <Typography variant="subtitle2" gutterBottom>
+            Saved Receipt Response
+          </Typography>
+          <Box component="pre" className="result-box">
+            {formattedCorrectionResult}
+          </Box>
+        </Box>
+      ) : null}
+    </>
+  );
+
+  const correctionView = (
+    <Stack spacing={1.2}>
+      <Grid container spacing={1.2} className="mobile-correction-toggle" role="tablist" aria-label="Correction view switcher">
+        <Grid size={6}>
+          <Button
+            variant={mobileCorrectionView === "receipt" ? "contained" : "outlined"}
+            fullWidth
+            onClick={() => setMobileCorrectionView("receipt")}
+          >
+            Receipt
+          </Button>
+        </Grid>
+        <Grid size={6}>
+          <Button
+            variant={mobileCorrectionView === "lines" ? "contained" : "outlined"}
+            fullWidth
+            onClick={() => setMobileCorrectionView("lines")}
+          >
+            Lines
+          </Button>
+        </Grid>
+      </Grid>
+
+      <Typography variant="h6">Correct Extracted Data</Typography>
+      <Typography color="text.secondary" variant="body2">
+        Fix the fields below and submit to the Kotlin API.
+      </Typography>
+
+      <Grid container spacing={1.2}>
+        <Grid
+          size={{ xs: 12, md: 5 }}
+          className={`correction-panel ${mobileCorrectionView === "receipt" ? "active" : "inactive"}`}
+        >
+          <Stack spacing={1.2} className="receipt-focus-panel">
+            <Typography variant="subtitle2">Scanned Receipt</Typography>
+            {previewUrl ? (
+              <Box
+                component="img"
+                src={previewUrl}
+                alt="Scanned receipt"
+                className="preview-image correction-preview-image receipt-focus-media"
+              />
+            ) : (
+              <Alert severity="info">No receipt image preview is available.</Alert>
+            )}
+            <Typography variant="caption" color="text.secondary">
+              {selectedFileLabel}
+            </Typography>
+          </Stack>
+        </Grid>
+
+        <Grid
+          size={{ xs: 12, md: 7 }}
+          className={`correction-panel ${mobileCorrectionView === "lines" ? "active" : "inactive"}`}
+        >
+          <Stack spacing={1.2}>
+            <TextField
+              label="Store Name"
+              value={receiptForm.storeName}
+              onChange={(event) =>
+                setReceiptForm((prev) => ({ ...prev, storeName: event.target.value }))
+              }
+              fullWidth
+            />
+            <TextField
+              label="Store Address"
+              value={receiptForm.storeAddress}
+              onChange={(event) =>
+                setReceiptForm((prev) => ({ ...prev, storeAddress: event.target.value }))
+              }
+              fullWidth
+            />
+            <Grid container spacing={1.2}>
+              <Grid size={6}>
+                <TextField
+                  label="Store Tax Number"
+                  value={receiptForm.storeTaxNumber}
+                  onChange={(event) =>
+                    setReceiptForm((prev) => ({
+                      ...prev,
+                      storeTaxNumber: event.target.value,
+                    }))
+                  }
+                  fullWidth
+                />
+              </Grid>
+              <Grid size={6}>
+                <TextField
+                  label="Store Chain"
+                  value={receiptForm.storeChain}
+                  onChange={(event) =>
+                    setReceiptForm((prev) => ({ ...prev, storeChain: event.target.value }))
+                  }
+                  fullWidth
+                />
+              </Grid>
+            </Grid>
+
+            <TextField
+              label="Purchase Datetime"
+              value={receiptForm.purchaseDateTime}
+              onChange={(event) =>
+                setReceiptForm((prev) => ({
+                  ...prev,
+                  purchaseDateTime: event.target.value,
+                }))
+              }
+              fullWidth
+            />
+
+            <Grid container spacing={1.2}>
+              <Grid size={4}>
+                <TextField
+                  label="Total"
+                  value={receiptForm.total}
+                  onChange={(event) =>
+                    setReceiptForm((prev) => ({ ...prev, total: event.target.value }))
+                  }
+                  fullWidth
+                />
+              </Grid>
+              <Grid size={4}>
+                <TextField
+                  label="Currency"
+                  value={receiptForm.currency}
+                  onChange={(event) =>
+                    setReceiptForm((prev) => ({ ...prev, currency: event.target.value }))
+                  }
+                  fullWidth
+                />
+              </Grid>
+              <Grid size={4}>
+                <TextField
+                  label="User ID"
+                  value={receiptForm.userId}
+                  onChange={(event) =>
+                    setReceiptForm((prev) => ({ ...prev, userId: event.target.value }))
+                  }
+                  fullWidth
+                />
+              </Grid>
+            </Grid>
+
+            <TextField
+              label="Payment Method"
+              value={receiptForm.paymentMethod}
+              onChange={(event) =>
+                setReceiptForm((prev) => ({
+                  ...prev,
+                  paymentMethod: event.target.value,
+                }))
+              }
+              fullWidth
+            />
+
+            <Typography variant="subtitle2">Receipt Lines</Typography>
+
+            {receiptForm.lines.map((line, index) => (
+              <Box key={`${index}-${line.name}`} className="line-card">
+                <Grid container spacing={1.2}>
+                  <Grid size={12}>
+                    <TextField
+                      label="Name"
+                      value={line.name}
+                      onChange={(event) =>
+                        updateLine(index, "name", event.target.value)
+                      }
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid size={6}>
+                    <TextField
+                      label="Quantity"
+                      value={line.quantity}
+                      onChange={(event) =>
+                        updateLine(index, "quantity", event.target.value)
+                      }
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid size={6}>
+                    <TextField
+                      label="Unit"
+                      value={line.unit}
+                      onChange={(event) => updateLine(index, "unit", event.target.value)}
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid size={6}>
+                    <TextField
+                      label="Unit Price"
+                      value={line.unitPrice}
+                      onChange={(event) =>
+                        updateLine(index, "unitPrice", event.target.value)
+                      }
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid size={6}>
+                    <TextField
+                      label="Total Price"
+                      value={line.totalPrice}
+                      onChange={(event) =>
+                        updateLine(index, "totalPrice", event.target.value)
+                      }
+                      fullWidth
+                    />
+                  </Grid>
+                </Grid>
+                <Button
+                  variant="text"
+                  color="error"
+                  onClick={() => removeLine(index)}
+                  sx={{ mt: 1 }}
+                >
+                  Remove Line
+                </Button>
+              </Box>
+            ))}
+
+            <Button variant="outlined" onClick={addLine} fullWidth>
+              Add Line
+            </Button>
+
+            <Button
+              variant="contained"
+              size="large"
+              onClick={submitCorrection}
+              disabled={submittingCorrection}
+            >
+              {submittingCorrection ? "Submitting..." : "Submit Corrected Receipt"}
+            </Button>
+          </Stack>
+        </Grid>
+      </Grid>
+    </Stack>
+  );
+
+  const guardedCorrectionView = canCorrect ? (
+    correctionView
+  ) : (
+    <Navigate to="/scan" replace />
+  );
+
   return (
     <>
       <CssBaseline />
       <Box className="app-shell">
-        <Container maxWidth="sm">
+        <Container maxWidth="md">
           <Card className="upload-card" elevation={6}>
             <CardContent>
-              <Stack spacing={2.5}>
-                <Typography component="h1" variant="h4" sx={{ fontWeight: 700 }}>
+              <Stack spacing={2.5} className="content-stack">
+                <Typography component="h1" variant="h4" sx={{ fontWeight: 700 }} className="title-text">
                   Receipt Upload
                 </Typography>
-                <Typography color="text.secondary">
+                <Typography color="text.secondary" className="subtitle-text">
                   Choose an image file or take a picture with your camera.
                 </Typography>
 
                 <Grid container spacing={1.2}>
-                  <Grid size={12}>
+                  <Grid size={6}>
                     <Button
-                      component="label"
-                      variant="outlined"
+                      variant={isScanRoute ? "contained" : "outlined"}
                       fullWidth
-                      startIcon={<ImageRoundedIcon />}
+                      className="mode-button"
+                      onClick={() => navigate("/scan")}
                     >
-                      Select Image From Device
-                      <input
-                        hidden
-                        accept="image/*"
-                        capture="environment"
-                        type="file"
-                        onChange={handleFileChange}
-                      />
+                      Scan Mode
                     </Button>
                   </Grid>
                   <Grid size={6}>
                     <Button
-                      variant="outlined"
+                      variant={!isScanRoute ? "contained" : "outlined"}
                       fullWidth
-                      startIcon={<PhotoCameraRoundedIcon />}
-                      onClick={startCamera}
-                      disabled={startingCamera}
+                      className="mode-button"
+                      onClick={() => {
+                        if (!canCorrect) {
+                          setErrorMessage("Upload and process a receipt first, then correct it.");
+                          navigate("/scan");
+                          return;
+                        }
+
+                        navigate("/correction");
+                      }}
+                      disabled={!canCorrect}
                     >
-                      {startingCamera ? "Starting..." : "Start Camera"}
-                    </Button>
-                  </Grid>
-                  <Grid size={6}>
-                    <Button
-                      variant="outlined"
-                      fullWidth
-                      onClick={captureFromCamera}
-                      disabled={!cameraActive}
-                    >
-                      Take Picture
-                    </Button>
-                  </Grid>
-                  <Grid size={12}>
-                    <Button
-                      variant="text"
-                      fullWidth
-                      onClick={stopCamera}
-                      disabled={!cameraActive}
-                    >
-                      Stop Camera
+                      Correction Mode
                     </Button>
                   </Grid>
                 </Grid>
-
-                {cameraActive ? (
-                  <Box className="camera-shell">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="camera-preview"
-                    />
-                  </Box>
-                ) : null}
-
-                <Typography variant="body2" color="text.secondary">
-                  {selectedFileLabel}
-                </Typography>
-
-                {previewUrl ? (
-                  <Box
-                    component="img"
-                    src={previewUrl}
-                    alt="Selected receipt"
-                    className="preview-image"
-                  />
-                ) : null}
-
-                <Button
-                  variant="contained"
-                  size="large"
-                  startIcon={
-                    uploading ? <CircularProgress size={18} /> : <CloudUploadRoundedIcon />
-                  }
-                  onClick={handleUpload}
-                  disabled={uploading || !selectedFile}
-                >
-                  {uploading ? "Uploading..." : "Upload to Backend"}
-                </Button>
-
-                <Divider />
+                <Routes>
+                  <Route path="/" element={<Navigate to="/scan" replace />} />
+                  <Route path="/scan" element={scanView} />
+                  <Route path="/correction" element={guardedCorrectionView} />
+                  <Route path="*" element={<Navigate to="/scan" replace />} />
+                </Routes>
 
                 <Typography variant="caption" color="text.secondary">
                   Target: {(API_BASE_URL || "(same origin)") + "/api/receipts/scan"}
                 </Typography>
 
                 {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
-
-                {result ? (
-                  <Box>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Response
-                    </Typography>
-                    <Box component="pre" className="result-box">
-                      {result}
-                    </Box>
-                  </Box>
-                ) : null}
               </Stack>
             </CardContent>
           </Card>
