@@ -40,7 +40,7 @@ class ReceiptEntity (
     @JoinColumn(name = "user_id", nullable = false)
     var user: UserEntity = UserEntity(),
 
-    @ManyToOne
+    @ManyToOne(cascade = [CascadeType.PERSIST, CascadeType.MERGE])
     @JoinColumn(name = "store_id")
     var store: StoreEntity? = null,
 

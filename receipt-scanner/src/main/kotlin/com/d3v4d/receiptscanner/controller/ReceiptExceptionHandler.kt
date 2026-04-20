@@ -10,6 +10,7 @@ import org.springframework.security.core.AuthenticationException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import java.time.format.DateTimeParseException
 
 @RestControllerAdvice
 class ReceiptExceptionHandler {
@@ -54,5 +55,19 @@ class ReceiptExceptionHandler {
     fun onDataIntegrityViolation(e: DataIntegrityViolationException) = mapOf(
         "errorCode" to "CONFLICT",
         "message" to "Username or email is already in use",
+    )
+
+    @ExceptionHandler(IllegalArgumentException::class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    fun onIllegalArgument(e: IllegalArgumentException) = mapOf(
+        "errorCode" to "INVALID_REQUEST",
+        "message" to (e.message ?: "Invalid request payload"),
+    )
+
+    @ExceptionHandler(DateTimeParseException::class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    fun onDateTimeParse(e: DateTimeParseException) = mapOf(
+        "errorCode" to "INVALID_REQUEST",
+        "message" to "Invalid purchase_datetime format",
     )
 }

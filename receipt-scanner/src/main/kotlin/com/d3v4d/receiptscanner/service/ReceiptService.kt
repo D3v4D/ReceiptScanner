@@ -25,6 +25,11 @@ class ReceiptService(
     private val receiptScanRepository: ReceiptScanRepository,
     private val userRepository: UserRepository,
 ) {
+    data class ReceiptImagePayload(
+        val bytes: ByteArray,
+        val contentType: String,
+    )
+
     private fun requireAuthenticatedUser(): UserEntity {
         val authentication = SecurityContextHolder.getContext().authentication
             ?: throw AccessDeniedException("Authentication required")
@@ -105,6 +110,22 @@ class ReceiptService(
         }
 
         receiptRepository.deleteById(receipt.id)
+    }
+
+    fun getReceiptImage(receiptId: Long): ReceiptImagePayload? {
+        val receipt = receiptRepository.findById(receiptId).orElse(null)
+            ?: throw ReceiptNotFoundException(receiptId)
+
+        val user = requireAuthenticatedUser()
+        if (receipt.user.id != user.id) {
+            throw AccessDeniedException("You can only view your own receipts")
+        }
+
+        val image = receipt.sourceScan?.image ?: return null
+        return ReceiptImagePayload(
+            bytes = image.imageData,
+            contentType = image.contentType,
+        )
     }
 
     private fun attachSourceScanIfPresent(receipt: ReceiptEntity, user: UserEntity, scanId: Long?) {

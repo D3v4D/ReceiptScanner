@@ -5,6 +5,8 @@ import com.d3v4d.receiptscanner.dto.response.ReceiptScanResponseDTO
 import com.d3v4d.receiptscanner.dto.response.ReceiptResponseDTO
 import com.d3v4d.receiptscanner.service.ReceiptScanService
 import com.d3v4d.receiptscanner.service.ReceiptService
+import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.multipart.MultipartFile
+import org.springframework.web.server.ResponseStatusException
 import org.slf4j.LoggerFactory
 import java.math.BigDecimal
 
@@ -64,6 +67,21 @@ class ReceiptController (
         @PathVariable("id") receiptId: Long,
     ) {
         receiptService.deleteReceipt(receiptId)
+    }
+
+    @GetMapping("/{id}/image")
+    fun getReceiptImage(
+        @PathVariable("id") receiptId: Long,
+    ): ResponseEntity<ByteArray> {
+        val image = receiptService.getReceiptImage(receiptId)
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "No image found for receipt")
+
+        val mediaType = runCatching { MediaType.parseMediaType(image.contentType) }
+            .getOrDefault(MediaType.APPLICATION_OCTET_STREAM)
+
+        return ResponseEntity.ok()
+            .contentType(mediaType)
+            .body(image.bytes)
     }
 
     @PostMapping("/scan", consumes = ["multipart/form-data"])

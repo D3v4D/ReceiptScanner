@@ -33,6 +33,23 @@ type AuthUser = {
   username: string;
 };
 
+type ReceiptApiLine = {
+  id: number;
+  name: string;
+  quantity: string;
+  unit: string;
+  unitPrice: number;
+};
+
+type ReceiptApiResponse = {
+  id: number;
+  sourceScanId: number | null;
+  storeName: string;
+  purchaseDateTime: string;
+  currency: string;
+  lines: ReceiptApiLine[];
+};
+
 type ReceiptLineForm = {
   name: string;
   quantity: string;
@@ -306,6 +323,13 @@ function App() {
   const [registerUsername, setRegisterUsername] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
+  const [receipts, setReceipts] = useState<ReceiptApiResponse[]>([]);
+  const [receiptsLoading, setReceiptsLoading] = useState(false);
+  const [receiptsError, setReceiptsError] = useState<string | null>(null);
+  const [selectedReceiptId, setSelectedReceiptId] = useState<number | null>(null);
+  const [selectedReceiptImageUrl, setSelectedReceiptImageUrl] = useState<string | null>(null);
+  const [selectedReceiptImageLoading, setSelectedReceiptImageLoading] = useState(false);
+  const [selectedReceiptImageError, setSelectedReceiptImageError] = useState<string | null>(null);
 
   const selectedFileLabel = useMemo(() => {
     if (!selectedFile) {
@@ -458,8 +482,38 @@ function App() {
     setCorrectionResult(null);
     setReceiptForm(createEmptyForm());
     setErrorMessage(null);
+    setReceipts([]);
+    setReceiptsError(null);
+    setSelectedReceiptId(null);
+    setSelectedReceiptImageUrl(null);
+    setSelectedReceiptImageError(null);
     setLoginPassword("");
     navigate("/login");
+  };
+
+  const loadReceipts = async () => {
+    try {
+      setReceiptsLoading(true);
+      setReceiptsError(null);
+      const response = await apiClient.get<ReceiptApiResponse[]>("/api/receipts");
+      setReceipts(response.data ?? []);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (handleAuthFailure(error.response?.status)) {
+          return;
+        }
+
+        const backendMessage =
+          typeof error.response?.data === "string"
+            ? error.response.data
+            : JSON.stringify(error.response?.data ?? {}, null, 2);
+        setReceiptsError(backendMessage || "Failed to load receipts.");
+      } else {
+        setReceiptsError("Failed to load receipts.");
+      }
+    } finally {
+      setReceiptsLoading(false);
+    }
   };
 
   const stopCamera = () => {
@@ -730,7 +784,96 @@ function App() {
     return JSON.stringify(correctionResult, null, 2);
   }, [correctionResult]);
 
+  const selectedReceipt = useMemo(() => {
+    if (selectedReceiptId === null) {
+      return null;
+    }
+
+    return receipts.find((receipt) => receipt.id === selectedReceiptId) ?? null;
+  }, [receipts, selectedReceiptId]);
+
+  useEffect(() => {
+    if (selectedReceiptId === null) {
+      setSelectedReceiptImageUrl(null);
+      setSelectedReceiptImageError(null);
+      setSelectedReceiptImageLoading(false);
+      return;
+    }
+
+    let isActive = true;
+    let createdUrl: string | null = null;
+
+    const fetchImage = async () => {
+      try {
+        setSelectedReceiptImageLoading(true);
+        setSelectedReceiptImageError(null);
+
+        const response = await apiClient.get(`/api/receipts/${selectedReceiptId}/image`, {
+          responseType: "blob",
+        });
+
+        if (!isActive) {
+          return;
+        }
+
+        createdUrl = URL.createObjectURL(response.data as Blob);
+        setSelectedReceiptImageUrl(createdUrl);
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        if (axios.isAxiosError(error)) {
+          if (error.response?.status === 404) {
+            setSelectedReceiptImageError("No uploaded image is linked to this receipt.");
+          } else {
+            setSelectedReceiptImageError("Could not load receipt image.");
+          }
+        } else {
+          setSelectedReceiptImageError("Could not load receipt image.");
+        }
+        setSelectedReceiptImageUrl(null);
+      } finally {
+        if (isActive) {
+          setSelectedReceiptImageLoading(false);
+        }
+      }
+    };
+
+    void fetchImage();
+
+    return () => {
+      isActive = false;
+      if (createdUrl) {
+        URL.revokeObjectURL(createdUrl);
+      }
+    };
+  }, [selectedReceiptId]);
+
+  useEffect(() => {
+    if (currentUser === null) {
+      return;
+    }
+
+    if (location.pathname === "/receipts") {
+      void loadReceipts();
+    }
+  }, [currentUser, location.pathname]);
+
+  useEffect(() => {
+    if (selectedReceiptId === null) {
+      return;
+    }
+
+    const exists = receipts.some((receipt) => receipt.id === selectedReceiptId);
+    if (!exists) {
+      setSelectedReceiptId(null);
+    }
+  }, [receipts, selectedReceiptId]);
+
   const isScanRoute = location.pathname === "/scan" || location.pathname === "/";
+  const isCorrectionRoute = location.pathname === "/correction";
+  const isReceiptsRoute = location.pathname === "/receipts";
   const isAuthenticated = currentUser !== null;
 
   const scanView = (
@@ -977,7 +1120,7 @@ function App() {
             <Typography variant="subtitle2">Receipt Lines</Typography>
 
             {receiptForm.lines.map((line, index) => (
-              <Box key={`${index}-${line.name}`} className="line-card">
+              <Box key={`line-${index}`} className="line-card">
                 <Grid container spacing={1.2}>
                   <Grid size={12}>
                     <TextField
@@ -1061,6 +1204,107 @@ function App() {
     correctionView
   ) : (
     <Navigate to="/scan" replace />
+  );
+
+  const receiptsView = (
+    <Stack spacing={1.2}>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+        <Typography variant="h6">Uploaded Receipts</Typography>
+        <Button variant="outlined" onClick={() => void loadReceipts()} disabled={receiptsLoading}>
+          {receiptsLoading ? "Refreshing..." : "Refresh"}
+        </Button>
+      </Stack>
+
+      {receiptsLoading ? (
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <CircularProgress size={18} />
+          <Typography color="text.secondary">Loading receipts...</Typography>
+        </Stack>
+      ) : null}
+
+      {receiptsError ? <Alert severity="error">{receiptsError}</Alert> : null}
+
+      {!receiptsLoading && !receiptsError && receipts.length === 0 ? (
+        <Alert severity="info">No receipts uploaded yet.</Alert>
+      ) : null}
+
+      {!receiptsLoading && !receiptsError
+        ? receipts.map((receipt) => (
+            <Box
+              key={receipt.id}
+              className="line-card"
+              sx={{
+                cursor: "pointer",
+                border: selectedReceiptId === receipt.id ? "1px solid" : undefined,
+                borderColor: selectedReceiptId === receipt.id ? "primary.main" : undefined,
+              }}
+              onClick={() => setSelectedReceiptId(receipt.id)}
+            >
+              <Stack spacing={0.6}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  {receipt.storeName || "Unknown Store"}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Receipt #{receipt.id} | {new Date(receipt.purchaseDateTime).toLocaleString()} | {receipt.currency}
+                </Typography>
+                {receipt.sourceScanId ? (
+                  <Typography variant="caption" color="text.secondary">
+                    Source scan ID: {receipt.sourceScanId}
+                  </Typography>
+                ) : null}
+
+                <Stack spacing={0.4} sx={{ mt: 0.6 }}>
+                  {receipt.lines.map((line) => (
+                    <Typography key={line.id} variant="body2">
+                      {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {receipt.currency}
+                    </Typography>
+                  ))}
+                </Stack>
+              </Stack>
+            </Box>
+          ))
+        : null}
+
+      {selectedReceipt ? (
+        <Box className="line-card">
+          <Stack spacing={1}>
+            <Typography variant="h6">Receipt Details</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Receipt #{selectedReceipt.id} | {selectedReceipt.storeName || "Unknown Store"}
+            </Typography>
+
+            {selectedReceiptImageLoading ? (
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <CircularProgress size={18} />
+                <Typography color="text.secondary">Loading image...</Typography>
+              </Stack>
+            ) : null}
+
+            {selectedReceiptImageError ? (
+              <Alert severity="info">{selectedReceiptImageError}</Alert>
+            ) : null}
+
+            {selectedReceiptImageUrl ? (
+              <Box
+                component="img"
+                src={selectedReceiptImageUrl}
+                alt={`Receipt ${selectedReceipt.id}`}
+                className="preview-image correction-preview-image receipt-focus-media"
+              />
+            ) : null}
+
+            <Typography variant="subtitle2">Items</Typography>
+            <Stack spacing={0.4}>
+              {selectedReceipt.lines.map((line) => (
+                <Typography key={line.id} variant="body2">
+                  {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {selectedReceipt.currency}
+                </Typography>
+              ))}
+            </Stack>
+          </Stack>
+        </Box>
+      ) : null}
+    </Stack>
   );
 
   const authView = (
@@ -1199,7 +1443,7 @@ function App() {
                     </Stack>
 
                     <Grid container spacing={1.2}>
-                      <Grid size={6}>
+                      <Grid size={4}>
                         <Button
                           variant={isScanRoute ? "contained" : "outlined"}
                           fullWidth
@@ -1209,9 +1453,9 @@ function App() {
                           Scan Mode
                         </Button>
                       </Grid>
-                      <Grid size={6}>
+                      <Grid size={4}>
                         <Button
-                          variant={!isScanRoute ? "contained" : "outlined"}
+                          variant={isCorrectionRoute ? "contained" : "outlined"}
                           fullWidth
                           className="mode-button"
                           onClick={() => {
@@ -1226,6 +1470,16 @@ function App() {
                           disabled={!canCorrect}
                         >
                           Correction Mode
+                        </Button>
+                      </Grid>
+                      <Grid size={4}>
+                        <Button
+                          variant={isReceiptsRoute ? "contained" : "outlined"}
+                          fullWidth
+                          className="mode-button"
+                          onClick={() => navigate("/receipts")}
+                        >
+                          Receipts
                         </Button>
                       </Grid>
                     </Grid>
@@ -1248,6 +1502,10 @@ function App() {
                   <Route
                     path="/correction"
                     element={isAuthenticated ? guardedCorrectionView : <Navigate to="/login" replace />}
+                  />
+                  <Route
+                    path="/receipts"
+                    element={isAuthenticated ? receiptsView : <Navigate to="/login" replace />}
                   />
                   <Route
                     path="*"

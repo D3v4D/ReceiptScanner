@@ -10,6 +10,12 @@ import com.d3v4d.receiptscanner.entity.ReceiptItemEntity
 import com.d3v4d.receiptscanner.entity.StoreEntity
 import com.d3v4d.receiptscanner.entity.UserEntity
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 fun ReceiptEntity.toDTO(): ReceiptResponseDTO {
     return ReceiptResponseDTO(
@@ -38,7 +44,7 @@ fun ReceiptRequestDTO.toEntity(
 ): ReceiptEntity {
     val receipt = ReceiptEntity(
         id = id,
-        purchaseDateTime = Instant.parse(this.purchaseDateTime),
+        purchaseDateTime = parsePurchaseDateTime(this.purchaseDateTime),
         currency = this.currency,
         lines = mutableListOf(),
         user = user,
@@ -73,6 +79,57 @@ fun Store.toEntity(): StoreEntity {
         name = this.name,
         address = this.address,
         storeChain = this.chain,
+    )
+}
+
+private fun parsePurchaseDateTime(value: String): Instant {
+    val trimmed = value.trim()
+    if (trimmed.isEmpty()) {
+        throw IllegalArgumentException("purchase_datetime is required")
+    }
+
+    try {
+        return Instant.parse(trimmed)
+    } catch (_: DateTimeParseException) {
+    }
+
+    try {
+        return OffsetDateTime.parse(trimmed).toInstant()
+    } catch (_: DateTimeParseException) {
+    }
+
+    val localDateTimePatterns = listOf(
+        DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
+        DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy.MM.dd HH:mm"),
+        DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"),
+        DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"),
+    )
+
+    for (formatter in localDateTimePatterns) {
+        try {
+            return LocalDateTime.parse(trimmed, formatter).toInstant(ZoneOffset.UTC)
+        } catch (_: DateTimeParseException) {
+        }
+    }
+
+    val localDatePatterns = listOf(
+        DateTimeFormatter.ISO_LOCAL_DATE,
+        DateTimeFormatter.ofPattern("yyyy.MM.dd"),
+        DateTimeFormatter.ofPattern("dd.MM.yyyy"),
+    )
+
+    for (formatter in localDatePatterns) {
+        try {
+            return LocalDate.parse(trimmed, formatter).atStartOfDay().toInstant(ZoneOffset.UTC)
+        } catch (_: DateTimeParseException) {
+        }
+    }
+
+    throw IllegalArgumentException(
+        "Invalid purchase_datetime '$value'. Use ISO instant (e.g. 2026-04-20T10:15:30Z) or a common date/date-time format.",
     )
 }
 
