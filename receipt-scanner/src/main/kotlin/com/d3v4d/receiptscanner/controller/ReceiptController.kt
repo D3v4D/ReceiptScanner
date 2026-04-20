@@ -1,11 +1,11 @@
 package com.d3v4d.receiptscanner.controller
 
 import com.d3v4d.receiptscanner.dto.request.ReceiptRequestDTO
+import com.d3v4d.receiptscanner.dto.response.ReceiptScanResponseDTO
 import com.d3v4d.receiptscanner.dto.response.ReceiptResponseDTO
 import com.d3v4d.receiptscanner.service.ReceiptScanService
 import com.d3v4d.receiptscanner.service.ReceiptService
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.CrossOrigin
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -19,7 +19,6 @@ import org.springframework.web.multipart.MultipartFile
 import org.slf4j.LoggerFactory
 import java.math.BigDecimal
 
-@CrossOrigin("*")
 @RestController
 @RequestMapping("/api/receipts")
 class ReceiptController (
@@ -70,7 +69,7 @@ class ReceiptController (
     @PostMapping("/scan", consumes = ["multipart/form-data"])
     fun scanReceipt(
         @RequestParam("image") image: MultipartFile,
-    ): ResponseEntity<String> {
+    ): ResponseEntity<ReceiptScanResponseDTO> {
         logger.info(
             "Received receipt scan request: filename={}, contentType={}, size={} bytes",
             image.originalFilename,

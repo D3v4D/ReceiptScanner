@@ -5,6 +5,8 @@ import java.math.BigDecimal
 
 data class ReceiptRequestDTO (
     val store: Store,
+    @JsonProperty("scan_id")
+    val scanId: Long? = null,
     @JsonProperty("purchase_datetime")
     val purchaseDateTime: String,
 
@@ -15,9 +17,6 @@ data class ReceiptRequestDTO (
     @JsonProperty("payment_method")
     val paymentMethod: String,
     val currency: String,
-
-    //TODO: make this safe
-    val userId: Long,
 )
 
 data class Store (

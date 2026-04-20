@@ -14,6 +14,7 @@ import java.time.Instant
 fun ReceiptEntity.toDTO(): ReceiptResponseDTO {
     return ReceiptResponseDTO(
         id = this.id,
+        sourceScanId = this.sourceScan?.id,
         storeName = this.store?.name ?: "",
         purchaseDateTime = this.purchaseDateTime.toString(),
         currency = this.currency,

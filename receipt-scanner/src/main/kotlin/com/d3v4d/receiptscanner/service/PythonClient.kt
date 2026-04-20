@@ -3,16 +3,20 @@ package com.d3v4d.receiptscanner.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.springframework.http.MediaType
 import org.springframework.http.client.MultipartBodyBuilder
-import org.springframework.http.HttpStatus
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.BodyInserters
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientRequestException
 import org.springframework.web.multipart.MultipartFile
-import org.springframework.web.reactive.function.client.bodyToMono
 import org.springframework.core.io.ByteArrayResource
 import org.slf4j.LoggerFactory
+import reactor.core.publisher.Mono
+
+data class PythonClientResponse(
+    val statusCode: Int,
+    val body: String,
+)
 
 @Service
 class PythonClient(
@@ -23,7 +27,7 @@ class PythonClient(
 
     private val webClient = WebClient.create(baseUrl)
 
-    fun sendImage(file: MultipartFile): String {
+    fun sendImage(file: MultipartFile): PythonClientResponse {
 
         val builder = MultipartBodyBuilder()
         val imageResource = object : ByteArrayResource(file.bytes) {
@@ -48,28 +52,33 @@ class PythonClient(
                 .uri("/extract")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()))
-                .retrieve()
-                .onStatus({ status -> status.isError }) { clientResponse ->
-                    clientResponse.bodyToMono<String>()
-                        .defaultIfEmpty("Python service returned an error response")
+                .exchangeToMono { clientResponse ->
+                    clientResponse.bodyToMono(String::class.java)
+                        .defaultIfEmpty("")
                         .map { body ->
-                            val message = extractErrorMessage(body)
-                            logger.warn(
-                                "Python service request failed with status {}: {}",
-                                clientResponse.statusCode().value(),
-                                message,
+                            PythonClientResponse(
+                                statusCode = clientResponse.statusCode().value(),
+                                body = body,
                             )
-                            PythonServiceException(clientResponse.statusCode(), message)
                         }
                 }
-                .bodyToMono<String>()
-                .block() ?: throw IllegalStateException("Python service returned an empty response body")
+                .onErrorResume { Mono.error(it) }
+                .block() ?: throw IllegalStateException("Python service returned an empty response")
         } catch (e: WebClientRequestException) {
             logger.error("Failed to reach Python service: {}", e.message)
-            throw PythonServiceException(HttpStatus.SERVICE_UNAVAILABLE, "Python service is unavailable")
+            throw PythonServiceException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Python service is unavailable")
         }
 
-        logger.info("Python service returned scan response ({} chars)", response.length)
+        if (response.statusCode >= 400) {
+            logger.warn(
+                "Python service request failed with status {}: {}",
+                response.statusCode,
+                extractErrorMessage(response.body),
+            )
+        } else {
+            logger.info("Python service returned scan response ({} chars)", response.body.length)
+        }
+
         return response
     }
 

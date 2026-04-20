@@ -9,6 +9,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.OneToMany
+import jakarta.persistence.OneToOne
 import jakarta.persistence.SequenceGenerator
 import jakarta.persistence.Table
 import java.time.Instant
@@ -41,5 +42,9 @@ class ReceiptEntity (
 
     @ManyToOne
     @JoinColumn(name = "store_id")
-    var store: StoreEntity? = null
+    var store: StoreEntity? = null,
+
+    @OneToOne
+    @JoinColumn(name = "source_scan_id", unique = true)
+    var sourceScan: ReceiptScanEntity? = null,
 )

@@ -4,11 +4,11 @@ import com.d3v4d.receiptscanner.dto.request.UserRequestDTO
 import com.d3v4d.receiptscanner.dto.response.UserResponseDTO
 import com.d3v4d.receiptscanner.entity.UserEntity
 
-fun UserRequestDTO.toEntity(): UserEntity =
+fun UserRequestDTO.toEntity(encodedPassword: String = this.password): UserEntity =
     UserEntity(
         id = 0,
         email = this.email,
-        password = this.password,
+        password = encodedPassword,
         username = this.username,
     )
 

@@ -7,6 +7,11 @@ spring:
     multipart:
       max-file-size: 20MB
       max-request-size: 25MB
+    session:
+      cookie:
+        http-only: true
+        secure: false
+        same-site: lax
 
   datasource:
     url: "jdbc:postgresql://localhost:5432/mydb"
@@ -17,6 +22,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+
+  session:
+    timeout: 30m
 
 python-service:
   base-url: ${PYTHON_SERVICE_BASE_URL:http://localhost:8000}

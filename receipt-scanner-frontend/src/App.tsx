@@ -22,6 +22,16 @@ import ImageRoundedIcon from "@mui/icons-material/ImageRounded";
 import "./App.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+});
+
+type AuthUser = {
+  id: number;
+  email: string;
+  username: string;
+};
 
 type ReceiptLineForm = {
   name: string;
@@ -40,7 +50,6 @@ type ReceiptForm = {
   total: string;
   paymentMethod: string;
   currency: string;
-  userId: string;
   lines: ReceiptLineForm[];
 };
 
@@ -61,7 +70,6 @@ const createEmptyForm = (): ReceiptForm => ({
   total: "0",
   paymentMethod: "CARD",
   currency: "HUF",
-  userId: "1",
   lines: [createEmptyLine()],
 });
 
@@ -147,6 +155,10 @@ const normalizeScanPayload = (value: unknown): unknown => {
     return value;
   }
 
+  if (root.payload && typeof root.payload === "object") {
+    return normalizeScanPayload(root.payload);
+  }
+
   if (root.formatted_json !== undefined) {
     const formattedJson = root.formatted_json;
     if (formattedJson && typeof formattedJson === "object") {
@@ -184,6 +196,25 @@ const normalizeScanPayload = (value: unknown): unknown => {
   }
 
   return root;
+};
+
+const extractScanId = (value: unknown): number | null => {
+  const root = asRecord(value);
+  if (!root) {
+    return null;
+  }
+
+  const scanIdCandidate = root.scan_id ?? root.scanId;
+  if (typeof scanIdCandidate === "number" && Number.isFinite(scanIdCandidate)) {
+    return scanIdCandidate;
+  }
+
+  if (typeof scanIdCandidate === "string") {
+    const parsed = Number(scanIdCandidate);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
 };
 
 const normalizeScanResultToForm = (value: unknown): Partial<ReceiptForm> => {
@@ -226,7 +257,8 @@ const normalizeScanResultToForm = (value: unknown): Partial<ReceiptForm> => {
   };
 };
 
-const buildReceiptPayload = (form: ReceiptForm) => ({
+const buildReceiptPayload = (form: ReceiptForm, scanId: number | null) => ({
+  scan_id: scanId,
   store: {
     name: form.storeName,
     address: form.storeAddress,
@@ -244,7 +276,6 @@ const buildReceiptPayload = (form: ReceiptForm) => ({
   total: Number(form.total || 0),
   payment_method: form.paymentMethod,
   currency: form.currency,
-  userId: Number(form.userId || 0),
 });
 
 function App() {
@@ -262,9 +293,19 @@ function App() {
   const [canCorrect, setCanCorrect] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<unknown | null>(null);
+  const [scanId, setScanId] = useState<number | null>(null);
   const [correctionResult, setCorrectionResult] = useState<unknown | null>(null);
   const [receiptForm, setReceiptForm] = useState<ReceiptForm>(createEmptyForm());
   const [mobileCorrectionView, setMobileCorrectionView] = useState<"receipt" | "lines">("lines");
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [loginIdentifier, setLoginIdentifier] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [registerUsername, setRegisterUsername] = useState("");
+  const [registerEmail, setRegisterEmail] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
 
   const selectedFileLabel = useMemo(() => {
     if (!selectedFile) {
@@ -296,6 +337,130 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const bootstrapAuth = async () => {
+      try {
+        const response = await apiClient.get<AuthUser>("/api/auth/me");
+        setCurrentUser(response.data);
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status !== 401) {
+          setErrorMessage("Could not verify session. Please sign in.");
+        }
+        setCurrentUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    void bootstrapAuth();
+  }, []);
+
+  const handleAuthFailure = (status?: number): boolean => {
+    if (status !== 401 && status !== 403) {
+      return false;
+    }
+
+    setCurrentUser(null);
+    setCanCorrect(false);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setErrorMessage("Your session expired. Please sign in again.");
+    navigate("/login");
+    return true;
+  };
+
+  const handleLogin = async () => {
+    if (!loginIdentifier.trim() || !loginPassword.trim()) {
+      setErrorMessage("Please provide your username/email and password.");
+      return;
+    }
+
+    try {
+      setAuthSubmitting(true);
+      setErrorMessage(null);
+      const response = await apiClient.post<AuthUser>("/api/auth/login", {
+        identifier: loginIdentifier,
+        password: loginPassword,
+      });
+      setCurrentUser(response.data);
+      setLoginPassword("");
+      navigate("/scan");
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const backendMessage =
+          typeof error.response?.data === "string"
+            ? error.response.data
+            : JSON.stringify(error.response?.data ?? {}, null, 2);
+        setErrorMessage(backendMessage || "Invalid credentials.");
+      } else {
+        setErrorMessage("Login failed.");
+      }
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!registerUsername.trim() || !registerEmail.trim() || !registerPassword.trim()) {
+      setErrorMessage("Please provide username, email, and password.");
+      return;
+    }
+
+    try {
+      setAuthSubmitting(true);
+      setErrorMessage(null);
+
+      await apiClient.post("/api/users", {
+        username: registerUsername,
+        email: registerEmail,
+        password: registerPassword,
+      });
+
+      const response = await apiClient.post<AuthUser>("/api/auth/login", {
+        identifier: registerUsername,
+        password: registerPassword,
+      });
+
+      setCurrentUser(response.data);
+      setRegisterPassword("");
+      setLoginPassword("");
+      setAuthMode("login");
+      navigate("/scan");
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const backendMessage =
+          typeof error.response?.data === "string"
+            ? error.response.data
+            : JSON.stringify(error.response?.data ?? {}, null, 2);
+        setErrorMessage(backendMessage || "Registration failed.");
+      } else {
+        setErrorMessage("Registration failed.");
+      }
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await apiClient.post("/api/auth/logout");
+    } catch {
+      // Local state reset below is authoritative for UI logout.
+    }
+
+    stopCamera();
+    setCurrentUser(null);
+    setCanCorrect(false);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setScanResult(null);
+    setCorrectionResult(null);
+    setReceiptForm(createEmptyForm());
+    setErrorMessage(null);
+    setLoginPassword("");
+    navigate("/login");
+  };
 
   const stopCamera = () => {
     if (mediaStreamRef.current) {
@@ -412,6 +577,7 @@ function App() {
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     setErrorMessage(null);
     setScanResult(null);
+    setScanId(null);
     const file = event.target.files?.[0] ?? null;
     setSelectedFile(file);
   };
@@ -430,8 +596,8 @@ function App() {
       const formData = new FormData();
       formData.append("image", selectedFile);
 
-      const response = await axios.post(
-        `${API_BASE_URL}/api/receipts/scan`,
+      const response = await apiClient.post(
+        "/api/receipts/scan",
         formData,
         {
           headers: {
@@ -441,8 +607,10 @@ function App() {
       );
 
       const normalizedResult = normalizeScanPayload(response.data);
+      const persistedScanId = extractScanId(response.data);
 
       setScanResult(normalizedResult);
+      setScanId(persistedScanId);
       setCanCorrect(true);
 
       const prefill = normalizeScanResultToForm(normalizedResult);
@@ -453,6 +621,10 @@ function App() {
       }));
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        if (handleAuthFailure(error.response?.status)) {
+          return;
+        }
+
         const normalizedFromError = normalizeScanPayload(error.response?.data);
         const prefill = normalizeScanResultToForm(normalizedFromError);
         const hasPrefill = Object.values(prefill).some((field) => {
@@ -465,6 +637,7 @@ function App() {
 
         if (hasPrefill) {
           setScanResult(normalizedFromError);
+          setScanId(extractScanId(error.response?.data));
           setCanCorrect(true);
           setErrorMessage(null);
           setReceiptForm((prev) => ({
@@ -512,17 +685,22 @@ function App() {
       setSubmittingCorrection(true);
       setErrorMessage(null);
 
-      const payload = buildReceiptPayload(receiptForm);
-      const response = await axios.post(`${API_BASE_URL}/api/receipts`, payload, {
+      const payload = buildReceiptPayload(receiptForm, scanId);
+      const response = await apiClient.post("/api/receipts", payload, {
         headers: {
           "Content-Type": "application/json",
         },
       });
 
       setCorrectionResult(response.data);
+      setScanId(null);
       navigate("/scan");
     } catch (error) {
       if (axios.isAxiosError(error)) {
+        if (handleAuthFailure(error.response?.status)) {
+          return;
+        }
+
         const backendMessage =
           typeof error.response?.data === "string"
             ? error.response.data
@@ -553,6 +731,7 @@ function App() {
   }, [correctionResult]);
 
   const isScanRoute = location.pathname === "/scan" || location.pathname === "/";
+  const isAuthenticated = currentUser !== null;
 
   const scanView = (
     <>
@@ -761,7 +940,7 @@ function App() {
             />
 
             <Grid container spacing={1.2}>
-              <Grid size={4}>
+              <Grid size={6}>
                 <TextField
                   label="Total"
                   value={receiptForm.total}
@@ -771,22 +950,12 @@ function App() {
                   fullWidth
                 />
               </Grid>
-              <Grid size={4}>
+              <Grid size={6}>
                 <TextField
                   label="Currency"
                   value={receiptForm.currency}
                   onChange={(event) =>
                     setReceiptForm((prev) => ({ ...prev, currency: event.target.value }))
-                  }
-                  fullWidth
-                />
-              </Grid>
-              <Grid size={4}>
-                <TextField
-                  label="User ID"
-                  value={receiptForm.userId}
-                  onChange={(event) =>
-                    setReceiptForm((prev) => ({ ...prev, userId: event.target.value }))
                   }
                   fullWidth
                 />
@@ -894,6 +1063,119 @@ function App() {
     <Navigate to="/scan" replace />
   );
 
+  const authView = (
+    <Stack spacing={1.5}>
+      <Typography variant="h6">{authMode === "login" ? "Sign In" : "Create Account"}</Typography>
+      <Typography color="text.secondary" variant="body2">
+        {authMode === "login"
+          ? "Sign in before scanning or uploading receipts."
+          : "Create an account, then start scanning receipts."}
+      </Typography>
+
+      {authMode === "login" ? (
+        <>
+          <TextField
+            label="Username or Email"
+            value={loginIdentifier}
+            onChange={(event) => setLoginIdentifier(event.target.value)}
+            fullWidth
+          />
+          <TextField
+            label="Password"
+            type="password"
+            value={loginPassword}
+            onChange={(event) => setLoginPassword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void handleLogin();
+              }
+            }}
+            fullWidth
+          />
+        </>
+      ) : (
+        <>
+          <TextField
+            label="Username"
+            value={registerUsername}
+            onChange={(event) => setRegisterUsername(event.target.value)}
+            fullWidth
+          />
+          <TextField
+            label="Email"
+            value={registerEmail}
+            onChange={(event) => setRegisterEmail(event.target.value)}
+            fullWidth
+          />
+          <TextField
+            label="Password"
+            type="password"
+            value={registerPassword}
+            onChange={(event) => setRegisterPassword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void handleRegister();
+              }
+            }}
+            fullWidth
+          />
+        </>
+      )}
+
+      <Button
+        variant="contained"
+        size="large"
+        onClick={() => {
+          if (authMode === "login") {
+            void handleLogin();
+            return;
+          }
+          void handleRegister();
+        }}
+        disabled={authSubmitting}
+      >
+        {authSubmitting
+          ? authMode === "login"
+            ? "Signing in..."
+            : "Creating account..."
+          : authMode === "login"
+            ? "Sign In"
+            : "Create Account"}
+      </Button>
+
+      <Button
+        variant="text"
+        onClick={() => {
+          setErrorMessage(null);
+          setAuthMode((prev) => (prev === "login" ? "register" : "login"));
+        }}
+        disabled={authSubmitting}
+      >
+        {authMode === "login" ? "Need an account? Register" : "Already registered? Sign in"}
+      </Button>
+    </Stack>
+  );
+
+  if (authLoading) {
+    return (
+      <>
+        <CssBaseline />
+        <Box className="app-shell">
+          <Container maxWidth="md">
+            <Card className="upload-card" elevation={6}>
+              <CardContent>
+                <Stack spacing={2} sx={{ py: 4, alignItems: "center" }}>
+                  <CircularProgress />
+                  <Typography color="text.secondary">Checking session...</Typography>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Container>
+        </Box>
+      </>
+    );
+  }
+
   return (
     <>
       <CssBaseline />
@@ -905,51 +1187,79 @@ function App() {
                 <Typography component="h1" variant="h4" sx={{ fontWeight: 700 }} className="title-text">
                   Receipt Upload
                 </Typography>
-                <Typography color="text.secondary" className="subtitle-text">
-                  Choose an image file or take a picture with your camera.
-                </Typography>
+                {isAuthenticated ? (
+                  <Stack spacing={1.4}>
+                    <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                      <Typography color="text.secondary" className="subtitle-text">
+                        Choose an image file or take a picture with your camera.
+                      </Typography>
+                      <Button variant="text" onClick={() => void handleLogout()}>
+                        Sign Out ({currentUser.username})
+                      </Button>
+                    </Stack>
 
-                <Grid container spacing={1.2}>
-                  <Grid size={6}>
-                    <Button
-                      variant={isScanRoute ? "contained" : "outlined"}
-                      fullWidth
-                      className="mode-button"
-                      onClick={() => navigate("/scan")}
-                    >
-                      Scan Mode
-                    </Button>
-                  </Grid>
-                  <Grid size={6}>
-                    <Button
-                      variant={!isScanRoute ? "contained" : "outlined"}
-                      fullWidth
-                      className="mode-button"
-                      onClick={() => {
-                        if (!canCorrect) {
-                          setErrorMessage("Upload and process a receipt first, then correct it.");
-                          navigate("/scan");
-                          return;
-                        }
+                    <Grid container spacing={1.2}>
+                      <Grid size={6}>
+                        <Button
+                          variant={isScanRoute ? "contained" : "outlined"}
+                          fullWidth
+                          className="mode-button"
+                          onClick={() => navigate("/scan")}
+                        >
+                          Scan Mode
+                        </Button>
+                      </Grid>
+                      <Grid size={6}>
+                        <Button
+                          variant={!isScanRoute ? "contained" : "outlined"}
+                          fullWidth
+                          className="mode-button"
+                          onClick={() => {
+                            if (!canCorrect) {
+                              setErrorMessage("Upload and process a receipt first, then correct it.");
+                              navigate("/scan");
+                              return;
+                            }
 
-                        navigate("/correction");
-                      }}
-                      disabled={!canCorrect}
-                    >
-                      Correction Mode
-                    </Button>
-                  </Grid>
-                </Grid>
+                            navigate("/correction");
+                          }}
+                          disabled={!canCorrect}
+                        >
+                          Correction Mode
+                        </Button>
+                      </Grid>
+                    </Grid>
+                  </Stack>
+                ) : null}
+
                 <Routes>
-                  <Route path="/" element={<Navigate to="/scan" replace />} />
-                  <Route path="/scan" element={scanView} />
-                  <Route path="/correction" element={guardedCorrectionView} />
-                  <Route path="*" element={<Navigate to="/scan" replace />} />
+                  <Route
+                    path="/"
+                    element={<Navigate to={isAuthenticated ? "/scan" : "/login"} replace />}
+                  />
+                  <Route
+                    path="/login"
+                    element={isAuthenticated ? <Navigate to="/scan" replace /> : authView}
+                  />
+                  <Route
+                    path="/scan"
+                    element={isAuthenticated ? scanView : <Navigate to="/login" replace />}
+                  />
+                  <Route
+                    path="/correction"
+                    element={isAuthenticated ? guardedCorrectionView : <Navigate to="/login" replace />}
+                  />
+                  <Route
+                    path="*"
+                    element={<Navigate to={isAuthenticated ? "/scan" : "/login"} replace />}
+                  />
                 </Routes>
 
-                <Typography variant="caption" color="text.secondary">
-                  Target: {(API_BASE_URL || "(same origin)") + "/api/receipts/scan"}
-                </Typography>
+                {isAuthenticated ? (
+                  <Typography variant="caption" color="text.secondary">
+                    Target: {(API_BASE_URL || "(same origin)") + "/api/receipts/scan"}
+                  </Typography>
+                ) : null}
 
                 {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
               </Stack>
