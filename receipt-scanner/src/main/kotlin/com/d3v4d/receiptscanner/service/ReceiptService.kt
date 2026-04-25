@@ -100,6 +100,7 @@ class ReceiptService(
             .toDTO()
     }
 
+    @Transactional
     fun deleteReceipt(receiptId: Long) {
         val receipt = receiptRepository.findById(receiptId).orElse(null)
             ?: throw ReceiptNotFoundException(receiptId)
@@ -109,7 +110,16 @@ class ReceiptService(
             throw AccessDeniedException("You can only delete your own receipts")
         }
 
-        receiptRepository.deleteById(receipt.id)
+        // Detach linked scan metadata first so the scan can be reused and to avoid
+        // relational state inconsistencies when the receipt row is removed.
+        receipt.sourceScan?.let { scan ->
+            scan.receipt = null
+            scan.status = ReceiptScanStatus.DRAFT
+            scan.finalizedAt = null
+        }
+        receipt.sourceScan = null
+
+        receiptRepository.delete(receipt)
     }
 
     fun getReceiptImage(receiptId: Long): ReceiptImagePayload? {
