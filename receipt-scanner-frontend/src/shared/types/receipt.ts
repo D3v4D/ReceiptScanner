@@ -4,12 +4,19 @@ export type AuthUser = {
   username: string;
 };
 
+export type Category = {
+  id: number;
+  name: string;
+  description?: string;
+};
+
 export type ReceiptApiLine = {
   id: number;
   name: string;
   quantity: string;
   unit: string;
   unitPrice: number;
+  category?: Category | null;
 };
 
 export type ReceiptApiResponse = {
@@ -27,6 +34,7 @@ export type ReceiptLineForm = {
   unit: string;
   unitPrice: string;
   totalPrice: string;
+  categoryId: number | null;
 };
 
 export type EditableReceiptLine = {
@@ -35,6 +43,7 @@ export type EditableReceiptLine = {
   quantity: string;
   unit: string;
   unitPrice: string;
+  category?: Category | null;
 };
 
 export type ReceiptForm = {
@@ -55,6 +64,7 @@ export const createEmptyLine = (): ReceiptLineForm => ({
   unit: "piece",
   unitPrice: "0",
   totalPrice: "0",
+  categoryId: null,
 });
 
 export const createEmptyForm = (): ReceiptForm => ({

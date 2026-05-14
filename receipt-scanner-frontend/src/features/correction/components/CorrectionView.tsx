@@ -1,6 +1,7 @@
 import { Alert, Box, Button, Grid, Stack, TextField, Typography } from "@mui/material";
 import type { Dispatch, SetStateAction } from "react";
-import type { ReceiptForm, ReceiptLineForm } from "../../../shared/types/receipt";
+import { CategorySelect } from "../../categories/components/CategorySelect";
+import type { Category, ReceiptForm, ReceiptLineForm } from "../../../shared/types/receipt";
 
 type MobileCorrectionView = "receipt" | "lines";
 
@@ -11,6 +12,9 @@ type CorrectionViewProps = {
   selectedFileLabel: string;
   receiptForm: ReceiptForm;
   setReceiptForm: Dispatch<SetStateAction<ReceiptForm>>;
+  categories: Category[];
+  categoriesLoading: boolean;
+  onCreateCategory: (name: string, description?: string) => Promise<Category | null>;
   updateLine: (index: number, field: keyof ReceiptLineForm, value: string) => void;
   removeLine: (index: number) => void;
   addLine: () => void;
@@ -25,6 +29,9 @@ export function CorrectionView({
   selectedFileLabel,
   receiptForm,
   setReceiptForm,
+  categories,
+  categoriesLoading,
+  onCreateCategory,
   updateLine,
   removeLine,
   addLine,
@@ -227,6 +234,18 @@ export function CorrectionView({
                         updateLine(index, "totalPrice", event.target.value)
                       }
                       fullWidth
+                    />
+                  </Grid>
+                  <Grid size={12}>
+                    <CategorySelect
+                      label="Category"
+                      value={line.categoryId}
+                      categories={categories}
+                      loading={categoriesLoading}
+                      onChange={(nextValue) =>
+                        updateLine(index, "categoryId", nextValue === null ? "" : String(nextValue))
+                      }
+                      onCreateCategory={onCreateCategory}
                     />
                   </Grid>
                 </Grid>

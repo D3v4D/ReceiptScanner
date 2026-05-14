@@ -34,4 +34,6 @@ data class ReceiptLineRequestDTO(
     val unitPrice: BigDecimal,
     @JsonProperty("total_price")
     val totalPrice: BigDecimal,
+    @JsonProperty("category_id")
+    val categoryId: Long? = null,
 )

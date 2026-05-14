@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
   Button,
   CircularProgress,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,7 +16,8 @@ import {
 } from "@mui/material";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
-import type { EditableReceiptLine, ReceiptApiResponse } from "../../../shared/types/receipt";
+import { CategorySelect } from "../../categories/components/CategorySelect";
+import type { Category, EditableReceiptLine, ReceiptApiResponse } from "../../../shared/types/receipt";
 
 type ReceiptsViewProps = {
   receiptsLoading: boolean;
@@ -27,11 +29,15 @@ type ReceiptsViewProps = {
   selectedReceiptImageLoading: boolean;
   selectedReceiptImageError: string | null;
   selectedReceiptImageUrl: string | null;
-  onRefresh: () => Promise<void>;
   onCompleteEdit: (receiptId: number, lines: EditableReceiptLine[]) => Promise<boolean>;
   onDeleteReceipt: (receiptId: number) => Promise<boolean>;
   receiptUpdateLoading: boolean;
   receiptUpdateError: string | null;
+  categories: Category[];
+  categoriesLoading: boolean;
+  onCreateCategory: (name: string, description?: string) => Promise<Category | null>;
+  onUpdateCategory: (id: number, name: string, description?: string) => Promise<Category | null>;
+  onDeleteCategory: (id: number) => Promise<boolean>;
 };
 
 export function ReceiptsView({
@@ -44,14 +50,18 @@ export function ReceiptsView({
   selectedReceiptImageLoading,
   selectedReceiptImageError,
   selectedReceiptImageUrl,
-  onRefresh,
   onCompleteEdit,
   onDeleteReceipt,
   receiptUpdateLoading,
   receiptUpdateError,
+  categories,
+  categoriesLoading,
+  onCreateCategory,
 }: ReceiptsViewProps) {
+  const nextTemporaryLineId = useRef(-1);
   const [isEditMode, setIsEditMode] = useState(false);
   const [draftLines, setDraftLines] = useState<EditableReceiptLine[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!selectedReceipt) {
@@ -61,6 +71,7 @@ export function ReceiptsView({
     }
 
     setIsEditMode(false);
+    nextTemporaryLineId.current = -1;
     setDraftLines(
       selectedReceipt.lines.map((line) => ({
         id: line.id,
@@ -68,9 +79,40 @@ export function ReceiptsView({
         quantity: line.quantity,
         unit: line.unit,
         unitPrice: String(line.unitPrice),
+        category: line.category || null,
       })),
     );
   }, [selectedReceipt]);
+
+  const selectedReceiptTotal = draftLines.reduce((sum, line) => {
+    const quantity = Number(line.quantity);
+    const unitPrice = Number(line.unitPrice);
+    const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+    const safeUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
+
+    return sum + safeQuantity * safeUnitPrice;
+  }, 0);
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredReceipts = useMemo(() => {
+    if (!normalizedSearchQuery) {
+      return receipts;
+    }
+
+    return receipts.filter((receipt) => {
+      const searchableText = [
+        receipt.id.toString(),
+        receipt.storeName,
+        receipt.currency,
+        new Date(receipt.purchaseDateTime).toLocaleString(),
+        ...receipt.lines.map((line) => line.name),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearchQuery);
+    });
+  }, [normalizedSearchQuery, receipts]);
 
   const handleDraftLineChange = (
     index: number,
@@ -80,6 +122,47 @@ export function ReceiptsView({
     setDraftLines((prev) =>
       prev.map((line, lineIndex) => (lineIndex === index ? { ...line, [field]: value } : line)),
     );
+  };
+
+  const handleDraftLineCategoryChange = (index: number, categoryId: number | null) => {
+    setDraftLines((prev) =>
+      prev.map((line, lineIndex) => {
+        if (lineIndex === index) {
+          if (categoryId === null) {
+            return { ...line, category: null };
+          }
+          const selectedCategory = categories.find((cat) => cat.id === categoryId);
+          return { ...line, category: selectedCategory || null };
+        }
+        return line;
+      }),
+    );
+  };
+
+  const renderCategoryLabel = (category?: Category | null) =>
+    category ? <Chip label={category.name} size="small" variant="outlined" /> : null;
+
+  const createDraftLine = (): EditableReceiptLine => ({
+    id: nextTemporaryLineId.current--,
+    name: "",
+    quantity: "1",
+    unit: "piece",
+    unitPrice: "0",
+    category: null,
+  });
+
+  const handleAddDraftLine = () => {
+    setDraftLines((prev) => [...prev, createDraftLine()]);
+  };
+
+  const handleRemoveDraftLine = (index: number) => {
+    setDraftLines((prev) => {
+      if (prev.length === 1) {
+        return [createDraftLine()];
+      }
+
+      return prev.filter((_, lineIndex) => lineIndex !== index);
+    });
   };
 
   const handleComplete = async () => {
@@ -118,11 +201,16 @@ export function ReceiptsView({
 
   return (
     <Stack spacing={1.2}>
-      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center" }}>
+      <Stack spacing={1}>
         <Typography variant="h6">Uploaded Receipts</Typography>
-        <Button variant="outlined" onClick={() => void onRefresh()} disabled={receiptsLoading}>
-          {receiptsLoading ? "Refreshing..." : "Refresh"}
-        </Button>
+        <TextField
+          label="Search receipts"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Store, item, currency, ID"
+          fullWidth
+          size="small"
+        />
       </Stack>
 
       {receiptsLoading ? (
@@ -138,8 +226,12 @@ export function ReceiptsView({
         <Alert severity="info">No receipts uploaded yet.</Alert>
       ) : null}
 
+      {!receiptsLoading && !receiptsError && receipts.length > 0 && filteredReceipts.length === 0 ? (
+        <Alert severity="info">No receipts match your search.</Alert>
+      ) : null}
+
       {!receiptsLoading && !receiptsError
-        ? receipts.map((receipt) => (
+        ? filteredReceipts.map((receipt) => (
             <Box
               key={receipt.id}
               className="line-card"
@@ -165,9 +257,12 @@ export function ReceiptsView({
 
                 <Stack spacing={0.4} sx={{ mt: 0.6 }}>
                   {receipt.lines.map((line) => (
-                    <Typography key={line.id} variant="body2">
-                      {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {receipt.currency}
-                    </Typography>
+                    <Stack key={line.id} spacing={0.4} sx={{ py: 0.25 }}>
+                      <Typography variant="body2">
+                        {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {receipt.currency}
+                      </Typography>
+                      {renderCategoryLabel(line.category)}
+                    </Stack>
                   ))}
                 </Stack>
               </Stack>
@@ -215,6 +310,10 @@ export function ReceiptsView({
               <Stack spacing={1}>
                 <Typography variant="body2" color="text.secondary">
                   {new Date(selectedReceipt.purchaseDateTime).toLocaleString()} | {selectedReceipt.currency}
+                </Typography>
+
+                <Typography variant="body2" color="text.secondary">
+                  Derived total: {selectedReceiptTotal.toFixed(2)} {selectedReceipt.currency}
                 </Typography>
 
                 {selectedReceiptImageLoading ? (
@@ -278,16 +377,39 @@ export function ReceiptsView({
                               fullWidth
                             />
                           </Stack>
+                          <CategorySelect
+                            label="Category"
+                            value={line.category?.id ?? null}
+                            categories={categories}
+                            loading={categoriesLoading}
+                            onChange={(nextValue) => handleDraftLineCategoryChange(index, nextValue)}
+                            onCreateCategory={onCreateCategory}
+                          />
+                          <Button
+                            variant="text"
+                            color="error"
+                            onClick={() => handleRemoveDraftLine(index)}
+                            disabled={receiptUpdateLoading}
+                            sx={{ alignSelf: "flex-start" }}
+                          >
+                            Remove item
+                          </Button>
                         </Stack>
                       </Box>
                     ))}
+                    <Button variant="outlined" onClick={handleAddDraftLine} disabled={receiptUpdateLoading}>
+                      Add another item
+                    </Button>
                   </Stack>
                 ) : (
                   <Stack spacing={0.4}>
                     {selectedReceipt.lines.map((line) => (
-                      <Typography key={line.id} variant="body2">
-                        {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {selectedReceipt.currency}
-                      </Typography>
+                      <Stack key={line.id} spacing={0.4} sx={{ py: 0.25 }}>
+                        <Typography variant="body2">
+                          {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {selectedReceipt.currency}
+                        </Typography>
+                        {renderCategoryLabel(line.category)}
+                      </Stack>
                     ))}
                   </Stack>
                 )}

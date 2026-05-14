@@ -15,6 +15,7 @@ export const buildReceiptPayload = (form: ReceiptForm, scanId: number | null) =>
     unit: line.unit,
     unit_price: Number(line.unitPrice || 0),
     total_price: Number(line.totalPrice || 0),
+    category_id: line.categoryId,
   })),
   total: Number(form.total || 0),
   payment_method: form.paymentMethod,

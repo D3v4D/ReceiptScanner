@@ -19,6 +19,7 @@ import {
   createEmptyForm,
   createEmptyLine,
   type AuthUser,
+  type Category,
   type EditableReceiptLine,
   type ReceiptApiResponse,
   type ReceiptForm,
@@ -67,6 +68,8 @@ function App() {
   const [receipts, setReceipts] = useState<ReceiptApiResponse[]>([]);
   const [receiptsLoading, setReceiptsLoading] = useState(false);
   const [receiptsError, setReceiptsError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [selectedReceiptId, setSelectedReceiptId] = useState<number | null>(null);
   const [selectedReceiptImageUrl, setSelectedReceiptImageUrl] = useState<string | null>(null);
   const [selectedReceiptImageLoading, setSelectedReceiptImageLoading] = useState(false);
@@ -262,6 +265,93 @@ function App() {
     }
   };
 
+  const loadCategories = async () => {
+    try {
+      setCategoriesLoading(true);
+      const response = await apiClient.get<Category[]>("/api/categories");
+      setCategories(response.data ?? []);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (handleAuthFailure(error.response?.status)) {
+          return;
+        }
+        setErrorMessage("Failed to load categories.");
+      } else {
+        setErrorMessage("Failed to load categories.");
+      }
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
+  const createCategory = async (name: string, description?: string): Promise<Category | null> => {
+    try {
+      const response = await apiClient.post<Category>("/api/categories", {
+        name,
+        description,
+      });
+      
+      setCategories((prev) => [...prev, response.data]);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (handleAuthFailure(error.response?.status)) {
+          return null;
+        }
+        setErrorMessage("Failed to create category.");
+      } else {
+        setErrorMessage("Failed to create category.");
+      }
+      return null;
+    }
+  };
+
+  const updateCategory = async (
+    id: number,
+    name: string,
+    description?: string,
+  ): Promise<Category | null> => {
+    try {
+      const response = await apiClient.put<Category>(`/api/categories/${id}`, {
+        name,
+        description,
+      });
+
+      setCategories((prev) =>
+        prev.map((cat) => (cat.id === id ? response.data : cat)),
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (handleAuthFailure(error.response?.status)) {
+          return null;
+        }
+        setErrorMessage("Failed to update category.");
+      } else {
+        setErrorMessage("Failed to update category.");
+      }
+      return null;
+    }
+  };
+
+  const deleteCategory = async (id: number): Promise<boolean> => {
+    try {
+      await apiClient.delete(`/api/categories/${id}`);
+      setCategories((prev) => prev.filter((cat) => cat.id !== id));
+      return true;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (handleAuthFailure(error.response?.status)) {
+          return false;
+        }
+        setErrorMessage("Failed to delete category.");
+      } else {
+        setErrorMessage("Failed to delete category.");
+      }
+      return false;
+    }
+  };
+
   const stopCamera = () => {
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -409,18 +499,49 @@ function App() {
     });
   };
 
-  const buildCorrectionForm = (prefill: Partial<ReceiptForm>): ReceiptForm => ({
-    ...createEmptyForm(),
-    ...prefill,
-    lines: prefill.lines && prefill.lines.length > 0 ? prefill.lines : [createEmptyLine()],
-  });
+  const buildCorrectionForm = (prefill: Partial<ReceiptForm>): ReceiptForm => {
+    const base = createEmptyForm();
+
+    return {
+      storeName:
+        prefill.storeName && prefill.storeName.trim().length > 0
+          ? prefill.storeName
+          : base.storeName,
+      storeAddress:
+        prefill.storeAddress && prefill.storeAddress.trim().length > 0
+          ? prefill.storeAddress
+          : base.storeAddress,
+      storeTaxNumber:
+        prefill.storeTaxNumber && prefill.storeTaxNumber.trim().length > 0
+          ? prefill.storeTaxNumber
+          : base.storeTaxNumber,
+      storeChain:
+        prefill.storeChain && prefill.storeChain.trim().length > 0
+          ? prefill.storeChain
+          : base.storeChain,
+      purchaseDateTime:
+        prefill.purchaseDateTime && prefill.purchaseDateTime.trim().length > 0
+          ? prefill.purchaseDateTime
+          : base.purchaseDateTime,
+      total: prefill.total && prefill.total.trim().length > 0 ? prefill.total : base.total,
+      paymentMethod:
+        prefill.paymentMethod && prefill.paymentMethod.trim().length > 0
+          ? prefill.paymentMethod
+          : base.paymentMethod,
+      currency: prefill.currency && prefill.currency.trim().length > 0 ? prefill.currency : base.currency,
+      lines: prefill.lines && prefill.lines.length > 0 ? prefill.lines : [createEmptyLine()],
+    };
+  };
 
   const createDraftReceiptForCorrection = async (
     prefill: Partial<ReceiptForm>,
     sourceScanId: number | null,
   ) => {
     const preparedForm = buildCorrectionForm(prefill);
+    console.log("[DEBUG] Prepared form after buildCorrectionForm:", preparedForm);
+    console.log("[DEBUG] purchaseDateTime:", preparedForm.purchaseDateTime);
     const payload = buildReceiptPayload(preparedForm, sourceScanId);
+    console.log("[DEBUG] Payload being sent to backend:", payload);
     const response = await apiClient.post<ReceiptApiResponse>("/api/receipts", payload, {
       headers: {
         "Content-Type": "application/json",
@@ -458,9 +579,12 @@ function App() {
         },
       );
 
+      console.log("[DEBUG] /api/receipts/scan response.data:", response.data);
       const normalizedResult = normalizeScanPayload(response.data);
+      console.log("[DEBUG] normalizedResult:", normalizedResult);
       const persistedScanId = extractScanId(response.data);
       const prefill = normalizeScanResultToForm(normalizedResult);
+      console.log("[DEBUG] prefill from scan:", prefill);
       await createDraftReceiptForCorrection(prefill, persistedScanId);
       navigate("/correction");
     } catch (error) {
@@ -508,7 +632,20 @@ function App() {
   const updateLine = (index: number, field: keyof ReceiptLineForm, value: string) => {
     setReceiptForm((prev) => ({
       ...prev,
-      lines: prev.lines.map((line, i) => (i === index ? { ...line, [field]: value } : line)),
+      lines: prev.lines.map((line, i) => {
+        if (i !== index) {
+          return line;
+        }
+
+        if (field === "categoryId") {
+          return {
+            ...line,
+            categoryId: value.trim() === "" ? null : Number(value),
+          };
+        }
+
+        return { ...line, [field]: value };
+      }),
     }));
   };
 
@@ -592,6 +729,7 @@ function App() {
           unit: line.unit,
           unit_price: safeUnitPrice,
           total_price: safeQuantity * safeUnitPrice,
+          category_id: line.category?.id,
         };
       });
 
@@ -691,9 +829,16 @@ function App() {
   };
 
   useEffect(() => {
-    if (selectedReceiptId === null) {
+    if (selectedReceipt === null) {
       setSelectedReceiptImageUrl(null);
       setSelectedReceiptImageError(null);
+      setSelectedReceiptImageLoading(false);
+      return;
+    }
+
+    if (selectedReceipt.sourceScanId === null) {
+      setSelectedReceiptImageUrl(null);
+      setSelectedReceiptImageError("This receipt has no uploaded image attached.");
       setSelectedReceiptImageLoading(false);
       return;
     }
@@ -722,8 +867,14 @@ function App() {
         }
 
         if (axios.isAxiosError(error)) {
+          const status = error.response?.status;
+          if (handleAuthFailure(status)) {
+            return;
+          }
           if (error.response?.status === 404) {
             setSelectedReceiptImageError("No uploaded image is linked to this receipt.");
+          } else if (status) {
+            setSelectedReceiptImageError(`Could not load receipt image (HTTP ${status}).`);
           } else {
             setSelectedReceiptImageError("Could not load receipt image.");
           }
@@ -746,12 +897,14 @@ function App() {
         URL.revokeObjectURL(createdUrl);
       }
     };
-  }, [selectedReceiptId]);
+  }, [selectedReceipt]);
 
   useEffect(() => {
     if (currentUser === null) {
       return;
     }
+
+    void loadCategories();
 
     if (location.pathname === "/receipts") {
       void loadReceipts();
@@ -797,6 +950,9 @@ function App() {
       selectedFileLabel={selectedFileLabel}
       receiptForm={receiptForm}
       setReceiptForm={setReceiptForm}
+      categories={categories}
+      categoriesLoading={categoriesLoading}
+      onCreateCategory={createCategory}
       updateLine={updateLine}
       removeLine={removeLine}
       addLine={addLine}
@@ -822,11 +978,15 @@ function App() {
       selectedReceiptImageLoading={selectedReceiptImageLoading}
       selectedReceiptImageError={selectedReceiptImageError}
       selectedReceiptImageUrl={selectedReceiptImageUrl}
-      onRefresh={loadReceipts}
       onCompleteEdit={completeReceiptEdit}
       onDeleteReceipt={deleteReceipt}
       receiptUpdateLoading={receiptUpdateLoading}
       receiptUpdateError={receiptUpdateError}
+      categories={categories}
+      categoriesLoading={categoriesLoading}
+      onCreateCategory={createCategory}
+      onUpdateCategory={updateCategory}
+      onDeleteCategory={deleteCategory}
     />
   );
 

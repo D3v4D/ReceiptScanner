@@ -8,4 +8,5 @@ data class ReceiptLineResponseDTO(
     val quantity: String,    // not int, because we are going to store KG in this field too
     val unit: String,        // unit type (e.g. 1 = piece, 2 = kg, etc.)
     val unitPrice: BigDecimal,
+    val category: CategoryResponseDTO? = null,
 )

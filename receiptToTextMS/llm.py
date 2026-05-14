@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+from datetime import datetime
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ollama:11434/api/generate")
 MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
@@ -169,6 +170,44 @@ def _is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+def _is_valid_datetime(value):
+    """Check if a value is a parseable datetime string. Accepts common formats."""
+    if not isinstance(value, str):
+        return False
+    
+    trimmed = value.strip()
+    if not trimmed:
+        return False
+    
+    # Try ISO formats and common variations
+    datetime_formats = [
+        "%Y-%m-%dT%H:%M:%SZ",          # ISO with Z
+        "%Y-%m-%dT%H:%M:%S",           # ISO without timezone
+        "%Y-%m-%d %H:%M:%S",           # Space separator
+        "%Y-%m-%d",                    # Date only
+        "%d.%m.%Y %H:%M:%S",           # European with time
+        "%d.%m.%Y",                    # European date
+        "%d/%m/%Y %H:%M:%S",           # Slash separator with time
+        "%d/%m/%Y",                    # Slash separator
+    ]
+    
+    for fmt in datetime_formats:
+        try:
+            datetime.strptime(trimmed, fmt)
+            return True
+        except ValueError:
+            continue
+    
+    # Try to parse as ISO with timezone
+    try:
+        datetime.fromisoformat(trimmed.replace('Z', '+00:00'))
+        return True
+    except (ValueError, AttributeError):
+        pass
+    
+    return False
+
+
 def _collect_schema_errors(data):
     errors = []
     if not isinstance(data, dict):
@@ -192,8 +231,11 @@ def _collect_schema_errors(data):
         if extra_store:
             errors.append(f"Unexpected keys in store: {sorted(extra_store)}")
 
-    if not isinstance(data.get("purchase_datetime"), str):
+    purchase_dt = data.get("purchase_datetime")
+    if not isinstance(purchase_dt, str):
         errors.append("'purchase_datetime' must be a string.")
+    elif not _is_valid_datetime(purchase_dt):
+        errors.append(f"'purchase_datetime' must be a valid datetime string (e.g., '2026-03-14T19:55:44' or '2026-03-14'). Got: '{purchase_dt}'")
     if not isinstance(data.get("payment_method"), str):
         errors.append("'payment_method' must be a string.")
     if not isinstance(data.get("currency"), str):

@@ -38,4 +38,8 @@ class ReceiptItemEntity (
     @JoinColumn(name = "receipt_id", nullable = false)
     var receipt: ReceiptEntity? = null,
 
+    @ManyToOne
+    @JoinColumn(name = "category_id", nullable = true)
+    var category: CategoryEntity? = null,
+
 )

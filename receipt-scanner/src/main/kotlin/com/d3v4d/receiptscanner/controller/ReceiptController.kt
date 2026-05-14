@@ -1,6 +1,7 @@
 package com.d3v4d.receiptscanner.controller
 
 import com.d3v4d.receiptscanner.dto.request.ReceiptRequestDTO
+import com.d3v4d.receiptscanner.dto.request.ReceiptLineRequestDTO
 import com.d3v4d.receiptscanner.dto.response.ReceiptScanResponseDTO
 import com.d3v4d.receiptscanner.dto.response.ReceiptResponseDTO
 import com.d3v4d.receiptscanner.service.ReceiptScanService
@@ -60,6 +61,14 @@ class ReceiptController (
         @RequestBody receiptDto: ReceiptRequestDTO,
     ): ReceiptResponseDTO {
         return receiptService.updateReceipt(receiptDto, receiptId)
+    }
+
+    @PostMapping("/{id}/items")
+    fun appendReceiptItems(
+        @PathVariable("id") receiptId: Long,
+        @RequestBody items: List<ReceiptLineRequestDTO>,
+    ): ReceiptResponseDTO {
+        return receiptService.appendReceiptItems(receiptId, items)
     }
 
     @DeleteMapping("/{id}")

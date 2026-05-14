@@ -8,4 +8,6 @@ interface ReceiptRepository
     : JpaRepository<ReceiptEntity, Long>,
     JpaSpecificationExecutor<ReceiptEntity> {
 
+    fun findByIdAndUserId(id: Long, userId: Long): ReceiptEntity?
+
 }

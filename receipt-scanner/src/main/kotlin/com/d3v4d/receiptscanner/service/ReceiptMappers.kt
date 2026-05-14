@@ -3,6 +3,7 @@ package com.d3v4d.receiptscanner.service
 import com.d3v4d.receiptscanner.dto.request.ReceiptLineRequestDTO
 import com.d3v4d.receiptscanner.dto.request.ReceiptRequestDTO
 import com.d3v4d.receiptscanner.dto.request.Store
+import com.d3v4d.receiptscanner.dto.response.CategoryResponseDTO
 import com.d3v4d.receiptscanner.dto.response.ReceiptLineResponseDTO
 import com.d3v4d.receiptscanner.dto.response.ReceiptResponseDTO
 import com.d3v4d.receiptscanner.entity.ReceiptEntity
@@ -35,6 +36,13 @@ fun ReceiptItemEntity.toDTO(): ReceiptLineResponseDTO {
         quantity = this.quantity.toString(),
         unit = this.unit,
         unitPrice = this.unitPrice,
+        category = this.category?.let { 
+            CategoryResponseDTO(
+                id = it.id,
+                name = it.name,
+                description = it.description,
+            )
+        },
     )
 }
 

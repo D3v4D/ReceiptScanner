@@ -166,6 +166,7 @@ export const normalizeScanResultToForm = (value: unknown): Partial<ReceiptForm> 
       unit: readValue(item, ["unit", "uom"]),
       unitPrice: readValue(item, ["unit_price", "unitPrice", "price"]),
       totalPrice: readValue(item, ["total_price", "totalPrice", "lineTotal", "sum"]),
+      categoryId: null,
     }));
 
   return {
