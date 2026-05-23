@@ -17,7 +17,8 @@ import {
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import { CategorySelect } from "../../categories/components/CategorySelect";
-import type { Category, EditableReceiptLine, ReceiptApiResponse } from "../../../shared/types/receipt";
+import type { Category, EditableReceiptLine, EditableReceiptMeta, ReceiptApiLine, ReceiptApiResponse } from "../../../shared/types/receipt";
+import type { Line } from "recharts";
 
 type ReceiptsViewProps = {
   receiptsLoading: boolean;
@@ -29,7 +30,11 @@ type ReceiptsViewProps = {
   selectedReceiptImageLoading: boolean;
   selectedReceiptImageError: string | null;
   selectedReceiptImageUrl: string | null;
-  onCompleteEdit: (receiptId: number, lines: EditableReceiptLine[]) => Promise<boolean>;
+  onCompleteEdit: (
+    receiptId: number,
+    lines: EditableReceiptLine[],
+    meta: EditableReceiptMeta,
+  ) => Promise<boolean>;
   onDeleteReceipt: (receiptId: number) => Promise<boolean>;
   receiptUpdateLoading: boolean;
   receiptUpdateError: string | null;
@@ -61,12 +66,25 @@ export function ReceiptsView({
   const nextTemporaryLineId = useRef(-1);
   const [isEditMode, setIsEditMode] = useState(false);
   const [draftLines, setDraftLines] = useState<EditableReceiptLine[]>([]);
+  const [draftMeta, setDraftMeta] = useState<EditableReceiptMeta | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const buildDraftMeta = (receipt: ReceiptApiResponse): EditableReceiptMeta => ({
+    storeName: receipt.storeName ?? "",
+    storeAddress: receipt.storeAddress ?? "",
+    storeTaxNumber: receipt.storeTaxNumber ?? "",
+    storeChain: receipt.storeChain ?? "",
+    purchaseDateTime: receipt.purchaseDateTime ?? "",
+    total: String(receipt.total ?? 0),
+    paymentMethod: receipt.paymentMethod ?? "",
+    currency: receipt.currency ?? "",
+  });
 
   useEffect(() => {
     if (!selectedReceipt) {
       setIsEditMode(false);
       setDraftLines([]);
+      setDraftMeta(null);
       return;
     }
 
@@ -82,6 +100,7 @@ export function ReceiptsView({
         category: line.category || null,
       })),
     );
+    setDraftMeta(buildDraftMeta(selectedReceipt));
   }, [selectedReceipt]);
 
   const selectedReceiptTotal = draftLines.reduce((sum, line) => {
@@ -139,8 +158,13 @@ export function ReceiptsView({
     );
   };
 
-  const renderCategoryLabel = (category?: Category | null) =>
-    category ? <Chip label={category.name} size="small" variant="outlined" /> : null;
+  const renderItemListing = (line: ReceiptApiLine, currency: string) =>
+    <Stack key={line.id} spacing={2} sx={{ py: 0.25, alignItems: "center", justifyContent: "flex-start"}} direction={"row"} >
+      <Typography variant="body2">
+        {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {currency}
+      </Typography>
+      line.category ? <Chip label={line.category?.name} size="small" variant="outlined" /> : null;
+    </Stack>
 
   const createDraftLine = (): EditableReceiptLine => ({
     id: nextTemporaryLineId.current--,
@@ -170,7 +194,11 @@ export function ReceiptsView({
       return;
     }
 
-    const success = await onCompleteEdit(selectedReceipt.id, draftLines);
+    if (!draftMeta) {
+      return;
+    }
+
+    const success = await onCompleteEdit(selectedReceipt.id, draftLines, draftMeta);
     if (success) {
       setIsEditMode(false);
       onSelectReceipt(null);
@@ -197,6 +225,18 @@ export function ReceiptsView({
       setIsEditMode(false);
       onSelectReceipt(null);
     }
+  };
+
+  const handleDraftMetaChange = (field: keyof EditableReceiptMeta, value: string) => {
+    setDraftMeta((prev) => {
+      if (prev) {
+        return { ...prev, [field]: value };
+      }
+      if (selectedReceipt) {
+        return { ...buildDraftMeta(selectedReceipt), [field]: value };
+      }
+      return prev;
+    });
   };
 
   return (
@@ -257,12 +297,7 @@ export function ReceiptsView({
 
                 <Stack spacing={0.4} sx={{ mt: 0.6 }}>
                   {receipt.lines.map((line) => (
-                    <Stack key={line.id} spacing={0.4} sx={{ py: 0.25 }}>
-                      <Typography variant="body2">
-                        {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {receipt.currency}
-                      </Typography>
-                      {renderCategoryLabel(line.category)}
-                    </Stack>
+                    renderItemListing(line, receipt.currency)
                   ))}
                 </Stack>
               </Stack>
@@ -308,13 +343,47 @@ export function ReceiptsView({
 
             <DialogContent dividers sx={{ maxHeight: "72vh" }}>
               <Stack spacing={1}>
-                <Typography variant="body2" color="text.secondary">
-                  {new Date(selectedReceipt.purchaseDateTime).toLocaleString()} | {selectedReceipt.currency}
-                </Typography>
-
-                <Typography variant="body2" color="text.secondary">
-                  Derived total: {selectedReceiptTotal.toFixed(2)} {selectedReceipt.currency}
-                </Typography>
+                <Typography variant="subtitle1">Receipt details</Typography>
+                {isEditMode ? (
+                  <Stack spacing={1}>
+                    <TextField
+                      label="Store"
+                      value={draftMeta?.storeName ?? ""}
+                      onChange={(event) => {
+                        handleDraftMetaChange("storeName", event.target.value);
+                      }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Timestamp"
+                      value={draftMeta?.purchaseDateTime ?? ""}
+                      onChange={(event) => {
+                        handleDraftMetaChange("purchaseDateTime", event.target.value);
+                      }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Total"
+                      value={draftMeta?.total ?? ""}
+                      onChange={(event) => {
+                        handleDraftMetaChange("total", event.target.value);
+                      }}
+                      fullWidth
+                    />
+                  </Stack>
+                ) : (
+                  <Stack spacing={0.4}>
+                    <Typography variant="body2">
+                      Store: {(draftMeta?.storeName ?? selectedReceipt.storeName) || "Unknown Store"}
+                    </Typography>
+                    <Typography variant="body2">
+                      {new Date(selectedReceipt.purchaseDateTime).toLocaleString()} | {selectedReceipt.currency}
+                    </Typography>
+                    <Typography variant="body2">
+                      Total: {draftMeta?.total ?? selectedReceipt.total ?? ""}
+                    </Typography>
+                  </Stack>
+                )}
 
                 {selectedReceiptImageLoading ? (
                   <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
@@ -336,7 +405,7 @@ export function ReceiptsView({
                   />
                 ) : null}
 
-                <Typography variant="subtitle2">Items</Typography>
+                <Typography variant="subtitle1">Items</Typography>
 
                 {isEditMode ? (
                   <Stack spacing={1}>
@@ -404,12 +473,7 @@ export function ReceiptsView({
                 ) : (
                   <Stack spacing={0.4}>
                     {selectedReceipt.lines.map((line) => (
-                      <Stack key={line.id} spacing={0.4} sx={{ py: 0.25 }}>
-                        <Typography variant="body2">
-                          {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {selectedReceipt.currency}
-                        </Typography>
-                        {renderCategoryLabel(line.category)}
-                      </Stack>
+                      renderItemListing(line, selectedReceipt.currency)
                     ))}
                   </Stack>
                 )}

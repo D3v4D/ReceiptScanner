@@ -9,7 +9,6 @@ import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.SequenceGenerator
 import jakarta.persistence.Table
-import java.math.BigDecimal
 
 @Entity
 @Table(name = "store")
@@ -24,6 +23,9 @@ class StoreEntity (
 
     @Column(nullable = false)
     var address: String = "",
+
+    @Column
+    var taxNumber: String? = null,
 
     @Column
     var storeChain: String? = null

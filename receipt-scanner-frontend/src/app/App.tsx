@@ -21,6 +21,7 @@ import {
   type AuthUser,
   type Category,
   type EditableReceiptLine,
+  type EditableReceiptMeta,
   type ReceiptApiResponse,
   type ReceiptForm,
   type ReceiptLineForm,
@@ -32,6 +33,7 @@ import {
 } from "../features/scan/utils/scanNormalization";
 import { buildReceiptPayload } from "../features/scan/utils/buildReceiptPayload";
 import { AuthView } from "../features/auth/components/AuthView";
+import { SpendingDashboardView } from "../features/dashboard/components/SpendingDashboardView";
 import { ScanView } from "../features/scan/components/ScanView";
 import { CorrectionView } from "../features/correction/components/CorrectionView";
 import { ReceiptsView } from "../features/receipts/components/ReceiptsView";
@@ -705,6 +707,7 @@ function App() {
   const completeReceiptEdit = async (
     receiptId: number,
     editedLines: EditableReceiptLine[],
+    editedMeta: EditableReceiptMeta,
   ): Promise<boolean> => {
     const targetReceipt = receipts.find((receipt) => receipt.id === receiptId);
     if (!targetReceipt) {
@@ -733,21 +736,31 @@ function App() {
         };
       });
 
-      const total = normalizedLines.reduce((sum, line) => sum + line.total_price, 0);
+      const computedTotal = normalizedLines.reduce((sum, line) => sum + line.total_price, 0);
+      const parsedTotal = Number(editedMeta.total);
+      const total = Number.isFinite(parsedTotal) ? parsedTotal : computedTotal;
+
+      const storeName = editedMeta.storeName.trim() || targetReceipt.storeName;
+      const storeAddress = editedMeta.storeAddress.trim() || targetReceipt.storeAddress;
+      const storeChain = editedMeta.storeChain.trim() || targetReceipt.storeChain;
+      const storeTaxNumber = editedMeta.storeTaxNumber.trim();
+      const purchaseDateTime = editedMeta.purchaseDateTime.trim() || targetReceipt.purchaseDateTime;
+      const paymentMethod = editedMeta.paymentMethod.trim() || targetReceipt.paymentMethod || "UNKNOWN";
+      const currency = editedMeta.currency.trim() || targetReceipt.currency;
 
       const payload = {
         scan_id: targetReceipt.sourceScanId,
         store: {
-          name: targetReceipt.storeName,
-          address: "",
-          taxNumber: 0,
-          chain: "",
+          name: storeName,
+          address: storeAddress,
+          taxNumber: Number(storeTaxNumber || 0),
+          chain: storeChain,
         },
-        purchase_datetime: targetReceipt.purchaseDateTime,
+        purchase_datetime: purchaseDateTime,
         products: normalizedLines,
         total,
-        payment_method: "UNKNOWN",
-        currency: targetReceipt.currency,
+        payment_method: paymentMethod,
+        currency,
       };
 
       const response = await apiClient.put<ReceiptApiResponse>(
@@ -906,7 +919,7 @@ function App() {
 
     void loadCategories();
 
-    if (location.pathname === "/receipts") {
+    if (location.pathname === "/receipts" || location.pathname === "/dashboard") {
       void loadReceipts();
     }
   }, [currentUser, location.pathname]);
@@ -924,6 +937,7 @@ function App() {
 
   const isScanRoute = location.pathname === "/scan" || location.pathname === "/";
   const isReceiptsRoute = location.pathname === "/receipts";
+  const isDashboardRoute = location.pathname === "/dashboard";
   const isAuthenticated = currentUser !== null;
 
   const scanView = (
@@ -990,6 +1004,14 @@ function App() {
     />
   );
 
+  const dashboardView = (
+    <SpendingDashboardView
+      receiptsLoading={receiptsLoading}
+      receiptsError={receiptsError}
+      receipts={receipts}
+    />
+  );
+
   const authView = (
     <AuthView
       authMode={authMode}
@@ -1040,7 +1062,7 @@ function App() {
                     </Stack>
 
                     <Grid container spacing={1.2}>
-                      <Grid size={6}>
+                      <Grid size={4}>
                         <Button
                           variant={isScanRoute ? "contained" : "outlined"}
                           fullWidth
@@ -1050,7 +1072,7 @@ function App() {
                           Scan
                         </Button>
                       </Grid>
-                      <Grid size={6}>
+                      <Grid size={4}>
                         <Button
                           variant={isReceiptsRoute ? "contained" : "outlined"}
                           fullWidth
@@ -1058,6 +1080,16 @@ function App() {
                           onClick={() => navigate("/receipts")}
                         >
                           Receipts
+                        </Button>
+                      </Grid>
+                      <Grid size={4}>
+                        <Button
+                          variant={isDashboardRoute ? "contained" : "outlined"}
+                          fullWidth
+                          className="mode-button"
+                          onClick={() => navigate("/dashboard")}
+                        >
+                          Dashboard
                         </Button>
                       </Grid>
                     </Grid>
@@ -1084,6 +1116,10 @@ function App() {
                   <Route
                     path="/receipts"
                     element={isAuthenticated ? receiptsView : <Navigate to="/login" replace />}
+                  />
+                  <Route
+                    path="/dashboard"
+                    element={isAuthenticated ? dashboardView : <Navigate to="/login" replace />}
                   />
                   <Route
                     path="*"

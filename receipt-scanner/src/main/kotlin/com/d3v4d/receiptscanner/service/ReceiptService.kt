@@ -126,6 +126,8 @@ class ReceiptService(
             }
         }
 
+        receipt.total = receipt.lines.fold(BigDecimal.ZERO) { sum, line -> sum + line.totalPrice }
+
         return receiptRepository
             .save(receipt)
             .toDTO()
