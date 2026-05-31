@@ -1,4 +1,3 @@
-```mermaid
 classDiagram
     class UserEntity {
         Long id
@@ -50,18 +49,19 @@ classDiagram
 
     class ReceiptScanEntity {
         Long id
-        ReceiptScanStatus status
+        String status
         String rawProviderResponse
         String normalizedPayload
         String ocrText
         String llmMeta
-        Int failedAttempts
+        int failedAttempts
         String errorMessage
         Instant createdAt
         Instant finalizedAt
     }
 
-    enum ReceiptScanStatus {
+    class ReceiptScanStatus {
+        <<enumeration>>
         DRAFT
         FINALIZED
         FAILED
@@ -82,6 +82,5 @@ classDiagram
     ReceiptScanEntity --> ReceiptImageEntity : image
     ReceiptImageEntity --> UserEntity : user
     ReceiptScanEntity --> UserEntity : user
-```
 
-
+    ReceiptScanEntity --> ReceiptScanStatus : status
