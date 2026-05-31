@@ -163,7 +163,7 @@ export function ReceiptsView({
       <Typography variant="body2">
         {line.name} - {line.quantity} {line.unit} - {line.unitPrice} {currency}
       </Typography>
-      line.category ? <Chip label={line.category?.name} size="small" variant="outlined" /> : null;
+      {line.category ? <Chip label={line.category?.name} size="small" variant="outlined" /> : null}
     </Stack>
 
   const createDraftLine = (): EditableReceiptLine => ({

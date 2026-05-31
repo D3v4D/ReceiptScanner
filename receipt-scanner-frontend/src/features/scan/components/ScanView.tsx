@@ -40,7 +40,8 @@ export function ScanView({
 
   return (
     <>
-      <Grid container spacing={1.2}>
+      <Grid container spacing={1.2}  sx={{
+    justifyContent: "center"}}>
         <Grid size={6}>
           <Button
             component="label"
@@ -48,7 +49,7 @@ export function ScanView({
             fullWidth
             startIcon={<ImageRoundedIcon />}
           >
-            Upload
+            Select Image
             <input
               hidden
               accept="image/*"
@@ -58,7 +59,7 @@ export function ScanView({
             />
           </Button>
         </Grid>
-        <Grid size={6}>
+        {/* <Grid size={6}>
           <Button
             variant="outlined"
             fullWidth
@@ -70,7 +71,7 @@ export function ScanView({
           >
             {startingCamera ? "Starting..." : "Scan"}
           </Button>
-        </Grid>
+        </Grid> */}
       </Grid>
 
       {cameraActive ? (
@@ -91,9 +92,9 @@ export function ScanView({
         </Button>
       ) : null}
 
-      <Typography variant="body2" color="text.secondary">
+      {/* <Typography variant="body2" color="text.secondary">
         {selectedFileLabel}
-      </Typography>
+      </Typography> */}
 
       {previewUrl ? (
         <Box
@@ -115,7 +116,7 @@ export function ScanView({
         }}
         disabled={uploadDisabled}
       >
-        {uploading ? "Uploading..." : "Upload to Backend"}
+        {uploading ? "Uploading..." : "Upload"}
       </Button>
 
       {formattedScanResult ? (

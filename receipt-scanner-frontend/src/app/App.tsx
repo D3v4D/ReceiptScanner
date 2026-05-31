@@ -1048,7 +1048,7 @@ function App() {
             <CardContent>
               <Stack spacing={2.5} className="content-stack">
                 <Typography component="h1" variant="h4" sx={{ fontWeight: 700 }} className="title-text">
-                  Receipt Upload
+                  Receipt Scanner
                 </Typography>
                 {isAuthenticated ? (
                   <Stack spacing={1.4}>

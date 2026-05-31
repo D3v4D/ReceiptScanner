@@ -9,6 +9,11 @@ app = FastAPI(title="Receipt OCR API")
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/jpg"}
 
 
+@app.on_event("startup")
+def preload_ocr_model():
+    import ocr  # noqa: F401
+
+
 def run_pipeline(image):
     from ocr import extract_text
     from llm import parse_to_json
