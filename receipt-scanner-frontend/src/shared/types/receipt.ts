@@ -23,7 +23,12 @@ export type ReceiptApiResponse = {
   id: number;
   sourceScanId: number | null;
   storeName: string;
+  storeAddress: string;
+  storeTaxNumber: string;
+  storeChain: string;
   purchaseDateTime: string;
+  total: number;
+  paymentMethod: string;
   currency: string;
   lines: ReceiptApiLine[];
 };
@@ -44,6 +49,17 @@ export type EditableReceiptLine = {
   unit: string;
   unitPrice: string;
   category?: Category | null;
+};
+
+export type EditableReceiptMeta = {
+  storeName: string;
+  storeAddress: string;
+  storeTaxNumber: string;
+  storeChain: string;
+  purchaseDateTime: string;
+  total: string;
+  paymentMethod: string;
+  currency: string;
 };
 
 export type ReceiptForm = {

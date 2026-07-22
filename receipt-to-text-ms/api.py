@@ -98,7 +98,7 @@ async def extract_receipt(file: UploadFile = File(...)):
                 "(e.g. `pip install paddlepaddle paddleocr`) and restart the API. "
                 f"Original error: {exc}"
             ),
-        ) from exc   
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Processing failed: {exc}") from exc
 

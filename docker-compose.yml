@@ -16,8 +16,9 @@ services:
       OLLAMA_URL: http://ollama:11434/api/generate
       OLLAMA_MODEL: gemma3:4b
       LLM_TIMEOUT_SECONDS: "600"
-      LLM_MAX_RETRIES: "5"
+      LLM_MAX_RETRIES: "1"
       PYTHONUNBUFFERED: "1"
+      OCR_LANG: "hu"
     volumes:
       - ./receipt-to-text-ms:/app
     ports:
@@ -56,5 +57,5 @@ services:
       - "5173:5173"
 
 volumes:
-  pgdata:
+  pgdata: 
   ollama_data:

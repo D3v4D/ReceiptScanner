@@ -23,7 +23,12 @@ fun ReceiptEntity.toDTO(): ReceiptResponseDTO {
         id = this.id,
         sourceScanId = this.sourceScan?.id,
         storeName = this.store?.name ?: "",
+        storeAddress = this.store?.address ?: "",
+        storeTaxNumber = this.store?.taxNumber ?: "",
+        storeChain = this.store?.storeChain ?: "",
         purchaseDateTime = this.purchaseDateTime.toString(),
+        total = this.total,
+        paymentMethod = this.paymentMethod,
         currency = this.currency,
         lines = this.lines.map { it.toDTO() }
     )
@@ -54,6 +59,8 @@ fun ReceiptRequestDTO.toEntity(
         id = id,
         purchaseDateTime = parsePurchaseDateTime(this.purchaseDateTime),
         currency = this.currency,
+        total = this.total,
+        paymentMethod = this.paymentMethod,
         lines = mutableListOf(),
         user = user,
         store = this.store.toEntity(),
@@ -86,6 +93,7 @@ fun Store.toEntity(): StoreEntity {
     return StoreEntity(
         name = this.name,
         address = this.address,
+        taxNumber = this.taxNumber.toString(),
         storeChain = this.chain,
     )
 }

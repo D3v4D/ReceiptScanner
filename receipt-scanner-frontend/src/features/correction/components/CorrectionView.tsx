@@ -62,9 +62,7 @@ export function CorrectionView({
       </Grid>
 
       <Typography variant="h6">Correct Extracted Data</Typography>
-      <Typography color="text.secondary" variant="body2">
-        Fix the fields below and submit to the Kotlin API.
-      </Typography>
+      
 
       <Grid container spacing={1.2}>
         <Grid
@@ -83,9 +81,7 @@ export function CorrectionView({
             ) : (
               <Alert severity="info">No receipt image preview is available.</Alert>
             )}
-            <Typography variant="caption" color="text.secondary">
-              {selectedFileLabel}
-            </Typography>
+            
           </Stack>
         </Grid>
 

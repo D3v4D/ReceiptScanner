@@ -12,6 +12,7 @@ import jakarta.persistence.OneToMany
 import jakarta.persistence.OneToOne
 import jakarta.persistence.SequenceGenerator
 import jakarta.persistence.Table
+import java.math.BigDecimal
 import java.time.Instant
 
 @Entity
@@ -28,6 +29,12 @@ class ReceiptEntity (
 
     @Column(nullable = false, length = 3)
     var currency: String = "HUF",
+
+    @Column(nullable = false)
+    var total: BigDecimal = BigDecimal.ZERO,
+
+    @Column(nullable = false)
+    var paymentMethod: String = "UNKNOWN",
 
     @OneToMany(
         mappedBy = "receipt",
