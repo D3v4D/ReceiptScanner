@@ -43,9 +43,26 @@ def _init_ocr_engine():
 
     raise RuntimeError(f"Could not initialize PaddleOCR with langs {candidates}: {last_error}")
 
+_OCR_ENGINE = None
+_OCR_INITIALIZED = False
 
-# Reuse a single OCR model instance for all calls.
-OCR_ENGINE = _init_ocr_engine()
+def is_ocr_initialized():
+    return _OCR_INITIALIZED
+
+
+def get_ocr_engine():
+    global _OCR_ENGINE
+    if _OCR_ENGINE is None:
+        _OCR_ENGINE = _init_ocr_engine()
+    return _OCR_ENGINE
+
+
+def init_ocr_on_startup():
+    global _OCR_ENGINE, _OCR_INITIALIZED
+    if _OCR_ENGINE is None:
+        _OCR_ENGINE = _init_ocr_engine()
+        _OCR_INITIALIZED = True
+    return _OCR_ENGINE
 
 
 def _normalize_entries(result):
@@ -145,6 +162,8 @@ def _score_result(result):
 def extract_text(image_source):
     img = _load_image(image_source)
 
+    engine = get_ocr_engine()
+
     best_result = None
     best_img = None
     best_score = -1e9
@@ -154,7 +173,7 @@ def extract_text(image_source):
     for degrees, rotation_code in ROTATIONS.items():
         rotated = cv2.rotate(img, rotation_code) if rotation_code is not None else img.copy()
         try:
-            result = OCR_ENGINE.ocr(rotated)
+            result = engine.ocr(rotated)
         except Exception as exc:
             last_error = exc
             print(f"[OCR] rotation={degrees} failed: {exc}")

@@ -11,15 +11,15 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   receipt-to-text-ms:
-    build: ./receiptToTextMS
+    build: receipt-to-text-ms
     environment:
       OLLAMA_URL: http://ollama:11434/api/generate
-      OLLAMA_MODEL: qwen2.5:7b
+      OLLAMA_MODEL: gemma3:4b
       LLM_TIMEOUT_SECONDS: "600"
       LLM_MAX_RETRIES: "5"
       PYTHONUNBUFFERED: "1"
     volumes:
-      - ./receiptToTextMS:/app
+      - ./receipt-to-text-ms:/app
     ports:
       - "8000:8000"
 

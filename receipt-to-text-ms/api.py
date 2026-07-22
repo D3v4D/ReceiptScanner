@@ -1,22 +1,68 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 import cv2
 import numpy as np
 import json
+import threading
 
-app = FastAPI(title="Receipt OCR API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    def load_ocr_background():
+        from ocr import init_ocr_on_startup
+        print("[API] Background thread: Initializing OCR engine...")
+        try:
+            init_ocr_on_startup()
+            print("[API] Background thread: OCR engine initialized successfully.")
+        except Exception as e:
+            print(f"[API] Background thread: Failed to initialize OCR engine: {e}")
+
+    ocr_thread = threading.Thread(target=load_ocr_background, daemon=True)
+    ocr_thread.start()
+
+    yield
+
+app = FastAPI(title="Receipt OCR API", lifespan=lifespan)
 
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/jpg"}
 
 
+def _empty_llm_result(ocr_text):
+    empty_json = {
+        "store": {"name": "", "address": "", "chain": ""},
+        "purchase_datetime": "",
+        "products": [],
+        "total": 0.0,
+        "payment_method": "",
+        "currency": ""
+    }
+    return ocr_text, json.dumps(empty_json), [], {
+        "retry_limit_reached": False,
+        "attempts_used": 0,
+        "validation_passed": False,
+        "service_unavailable": True,
+    }
+
+
 def run_pipeline(image):
-    from ocr import extract_text
     from llm import parse_to_json
+    from ocr import extract_text, is_ocr_initialized
 
-    ocr_text, _raw_result, _best_img, text_with_boxes = extract_text(image)
-    formatted_text, failed_attempts, llm_meta = parse_to_json(ocr_text, text_with_boxes)
+    if not is_ocr_initialized():
+        print("[API] OCR engine is not initialized yet. Skipping OCR task.")
+        return _empty_llm_result("")
+
+    try:
+        ocr_text, _raw_result, _best_img, text_with_boxes = extract_text(image)
+    except Exception as exc:
+        raise _empty_llm_result("")
+
+    try:
+        formatted_text, failed_attempts, llm_meta = parse_to_json(ocr_text, text_with_boxes)
+    except (RuntimeError, Exception):
+        return _empty_llm_result(ocr_text)
+
     return ocr_text, formatted_text, failed_attempts, llm_meta
-
 
 @app.get("/health")
 def health_check():
@@ -45,7 +91,6 @@ async def extract_receipt(file: UploadFile = File(...)):
     try:
         ocr_text, formatted_text, failed_attempts, llm_meta = run_pipeline(image)
     except ModuleNotFoundError as exc:
-        # Surface dependency setup errors clearly for API clients.
         raise HTTPException(
             status_code=500,
             detail=(
@@ -53,12 +98,12 @@ async def extract_receipt(file: UploadFile = File(...)):
                 "(e.g. `pip install paddlepaddle paddleocr`) and restart the API. "
                 f"Original error: {exc}"
             ),
-        ) from exc
+        ) from exc   
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Processing failed: {exc}") from exc
 
     payload = {
-        "formatted_json": None,  # default to None; will attempt to parse below
+        "formatted_json": None,
         "ocr_text": ocr_text,
         "formatted_text": formatted_text,
         "failed_attempts": failed_attempts,

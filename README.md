@@ -3,7 +3,7 @@
 A full-stack receipt scanning app with:
 - Kotlin Spring Boot API (`receipt-scanner`)
 - React frontend (`receipt-scanner-frontend`)
-- Python OCR/LLM microservice (`receiptToTextMS`)
+- Python OCR/LLM microservice (`receipt-to-text-ms`)
 - PostgreSQL database
 
 ## Quick Start (Docker, recommended)
@@ -65,7 +65,7 @@ Optional API base override:
 
 ### Python OCR/LLM service
 ```bash
-cd receiptToTextMS
+cd receipt-to-text-ms
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt

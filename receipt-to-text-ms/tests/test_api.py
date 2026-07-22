@@ -93,3 +93,28 @@ def test_extract_retry_limit_reached(monkeypatch):
     assert response.status_code == 422
     body = response.json()
     assert body["llm_meta"]["retry_limit_reached"] is True
+
+
+def test_extract_llm_service_unavailable_returns_empty_json(monkeypatch):
+    def fake_pipeline(_image):
+        return "OCR TEXT", "{}", [], {
+            "retry_limit_reached": False,
+            "attempts_used": 0,
+            "validation_passed": False,
+            "service_unavailable": True,
+        }
+
+    monkeypatch.setattr(api, "run_pipeline", fake_pipeline)
+
+    response = client.post(
+        "/extract",
+        files={"file": ("receipt.png", _make_test_image_bytes(), "image/png")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ocr_text"] == "OCR TEXT"
+    assert body["formatted_json"] == {}
+    assert body["formatted_text"] == "{}"
+    assert body["failed_attempts"] == []
+    assert body["llm_meta"]["service_unavailable"] is True
